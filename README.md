@@ -9,13 +9,19 @@ All data stays in that browser's local storage; nothing ever leaves your machine
 
 ## The one rule it enforces (no double counting)
 
-- A **card purchase** is the real spending event. It raises what you owe on the card the day it
-  happens — but no cash leaves checking yet.
+- A **card purchase** is the real spending event. The moment you log it, it raises that card's
+  **unfunded** total on the Cards tab — but no cash leaves checking yet.
 - The later **card payment** is a **transfer** of cash from checking to the card. It is never a
   second expense.
-- Only rows that actually move cash drive the checking projection and the headline number, and
-  each card tracks a **funded vs unfunded** statement portion so reserved card spending isn't
-  counted twice.
+- Only rows that actually move cash drive the checking projection and the headline number — a
+  new purchase only moves the headline **Safe to Spend** once it's actually scheduled to leave
+  checking (Reconcile the card, or its statement due date falls before your next payday).
+- Each card tracks **balance / statement / funded / unfunded** directly on the Cards tab —
+  balance and funded are edited inline; statement + due date + autopay go through **Reconcile**,
+  which also resets "new since statement" back to zero.
+- Any **Pending** ledger item still dated more than 2 weeks in the past gets flagged in a banner —
+  it's almost always a bill that already posted (mark it Cleared) or leftover cruft (delete it),
+  and it silently drags your number down for as long as it sits there.
 
 ## First run
 

@@ -206,13 +206,18 @@
   <details class="help">
     <summary>How this works (the one rule)</summary>
     <div>
-      <p>A <b>card purchase</b> is the real spending event — it raises what you owe on the card the day it
-      happens, but no cash leaves checking yet. The later <b>card payment</b> is just a transfer of cash from
-      checking to the card — never a second expense. Only rows that actually move cash in or out of checking
-      drive the projection and the headline number, so nothing is ever counted twice.</p>
+      <p>A <b>card purchase</b> is the real spending event — the moment you log it, it raises that card's
+      "Unfunded" amount on the Cards tab (money you now owe but haven't set cash aside for), but no cash leaves
+      checking yet. The later <b>card payment</b> is just a transfer of cash from checking to the card — never a
+      second expense. Only rows that actually move cash in or out of checking drive the projection and the
+      headline number, so nothing is ever counted twice.</p>
       <p><b>Safe to spend</b> = spendable checking − your cash reserve − everything scheduled to leave checking
       before the next payday (+ anything scheduled to arrive before then). Moderate adds the next paycheck;
-      Aggressive adds savings backup.</p>
+      Aggressive adds savings backup. A card purchase only moves this headline number once it's actually
+      scheduled to leave checking — reconcile the card (or wait for its statement payment) to fold it in.</p>
+      <p>A <b>Pending</b> item that's still sitting there weeks after its date is usually forgotten cruft (an
+      autopay that actually posted, or leftover sample data) — it keeps counting against you forever until you
+      clear or delete it, so the app flags anything over two weeks stale.</p>
     </div>
   </details>
 
@@ -251,6 +256,7 @@
           <option value="all">Everything</option>
           <option value="cash">Cash-impact only</option>
           <option value="cleared">Cleared</option>
+          <option value="stale">Stale pending (needs review)</option>
         </select></div>
     </div>
     <div class="scroll-x">
@@ -267,16 +273,18 @@
     <h2>Credit cards</h2>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Card</th><th class="num">Owed now</th><th class="num">Statement</th><th>Due</th><th>Autopay</th><th class="num">Funded</th><th class="num">Unfunded</th><th></th></tr></thead>
+        <thead><tr><th>Card</th><th class="num">Balance</th><th class="num">New since statement</th><th class="num">Statement</th><th>Due</th><th>Autopay</th><th class="num">Funded</th><th class="num">Unfunded</th><th></th></tr></thead>
         <tbody id="cardsBody"></tbody>
       </table>
     </div>
     <div class="frow" style="margin-top:12px">
       <button class="ghost" id="addCardBtn">+ Add card</button>
     </div>
-    <p class="hint">When a statement arrives, hit <b>Reconcile</b>: enter the statement balance and due date and
-    the app schedules the payment for you (full / minimum / custom, per the card’s autopay). “Funded” is how much
-    of the statement you’ve already set cash aside for; the unfunded remainder is surfaced on the dashboard.</p>
+    <p class="hint"><b>Balance</b> and <b>Funded</b> are quick edits — click the number and type. <b>New since
+    statement</b> is anything charged or refunded on the card since your last reconcile; it's automatic, folded
+    straight into <b>Unfunded</b> (owed − funded) so a new purchase shows up here immediately. When a statement
+    arrives, hit <b>Reconcile</b>: it prefills the live total, and saving schedules the payment for you
+    (full / minimum / custom, per the card's autopay) and resets "new since statement" to zero.</p>
   </section>
 
   <section class="panel card" id="panel-accounts">
@@ -506,8 +514,23 @@ const STS = (() => {
 
   const spendableChecking = db => r2(db.accounts.filter(a => a.spendable).reduce((s, a) => s + (+a.balance || 0), 0));
   const savingsBackup = db => r2(db.accounts.filter(a => a.type === "Savings").reduce((s, a) => s + (+a.balance || 0), 0));
-  const cardUnfunded = c => c.treatAs === "Card" ? r2(Math.max(0, (+c.statementBalance || 0) - (+c.funded || 0))) : 0;
-  const totalUnfunded = db => r2(db.cards.reduce((s, c) => s + cardUnfunded(c), 0));
+
+  // A card's last-reconciled statement is a snapshot; anything charged/refunded to the card AFTER that
+  // point is new activity the statement hasn't seen yet, and it isn't funded by definition. Falls back to
+  // dueDate for cards saved before this field existed, since that's the closest anchor already on hand.
+  // planned_spend is explicitly a maybe ("optional - can cancel"), so it's excluded until it becomes real.
+  const cardAnchorDate = c => c.reconciledThrough || c.dueDate || "0000-00-00";
+  function cardNewActivity(db, c) {
+    let delta = 0;
+    const anchor = cardAnchorDate(c);
+    for (const e of db.ledger) {
+      if (notVoid(e) && e.cardName === c.name && e.type !== "card_payment" && e.type !== "planned_spend" && e.date > anchor) delta += -e.amount;
+    }
+    return r2(delta);
+  }
+  const cardOwedNow = (db, c) => r2((+c.statementBalance || 0) + cardNewActivity(db, c));
+  const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - (+c.funded || 0))) : 0;
+  const totalUnfunded = db => r2(db.cards.reduce((s, c) => s + cardUnfunded(db, c), 0));
 
   function windowFlows(db, asOfD, payday) {
     let inflow = 0, outflow = 0;
@@ -517,6 +540,15 @@ const STS = (() => {
       }
     }
     return { inflow: r2(inflow), outflow: r2(outflow) };
+  }
+
+  // Pending items still dated well in the past are usually forgotten cruft (a payment that already
+  // happened but was never marked Cleared, or a stale row left over from old seed/sample data) rather
+  // than a real upcoming bill — flag them separately so they don't silently distort the projection forever.
+  function stalePending(db, asOfD, thresholdDays) {
+    const cutoff = addDays(asOfD, -(thresholdDays || 14));
+    return db.ledger.filter(e => isCash(e) && e.status === "Pending" && e.date < cutoff)
+      .sort((a, b) => a.date < b.date ? -1 : 1);
   }
 
   function overduePendingOut(db, asOfD) {
@@ -751,21 +783,23 @@ const STS = (() => {
         Aggressive: safeToSpend(db, "Aggressive", ctx)
       },
       unfunded: totalUnfunded(db),
-      unfundedCards: db.cards.filter(c => cardUnfunded(c) > 0).length,
+      unfundedCards: db.cards.filter(c => cardUnfunded(db, c) > 0).length,
       proj,
       reserveBreach: proj.low < db.settings.reserve,
       goesNegative: proj.low < 0,
-      overdueOut: overduePendingOut(db, asOfD)
+      overdueOut: overduePendingOut(db, asOfD),
+      stale: stalePending(db, asOfD)
     };
   }
 
   return {
     r2, todayStr, toDate, toStr, addDays, daysBetween, addMonthsAnchored,
     asOf, effectiveNextPayday, spendableChecking, savingsBackup,
-    cardUnfunded, totalUnfunded, windowFlows, safeToSpend, projection,
+    cardAnchorDate, cardNewActivity, cardOwedNow, cardUnfunded, totalUnfunded,
+    windowFlows, safeToSpend, projection,
     missingRecurring, instanceEvent, occurrences,
     parseCSV, parseDateLoose, parseAmountLoose, normalizeCsv, classifyImport,
-    overduePendingOut, computeAll
+    overduePendingOut, stalePending, computeAll
   };
 })();
 /*ENGINE-END*/
@@ -851,10 +885,19 @@ function render() {
 
   // nudge
   const missing = STS.missingRecurring(DB, C.asOfD, DB.settings.horizonDays);
-  $("nudge").innerHTML = missing.length
-    ? `<div class="banner warn"><span>⚠ ${missing.length} upcoming recurring bill${missing.length === 1 ? " isn't" : "s aren't"} in the ledger yet, so the projection is missing them.</span>
-       <button class="primary" onclick="openGenerate()">Review &amp; add</button></div>`
-    : "";
+  const banners = [];
+  if (C.stale.length) {
+    const staleTotal = STS.r2(C.stale.reduce((s, e) => s + Math.abs(e.amount), 0));
+    banners.push(`<div class="banner warn"><span>⚠ ${C.stale.length} pending item${C.stale.length === 1 ? "" : "s"} totaling ${fmt$(staleTotal)}
+       ${C.stale.length === 1 ? "is" : "are"} dated more than 2 weeks ago and still marked Pending — probably already happened
+       or is leftover sample data, and it's counting against Safe to Spend until you clear or delete it.</span>
+       <button class="primary" onclick="openStaleReview()">Review</button></div>`);
+  }
+  if (missing.length) {
+    banners.push(`<div class="banner warn"><span>⚠ ${missing.length} upcoming recurring bill${missing.length === 1 ? " isn't" : "s aren't"} in the ledger yet, so the projection is missing them.</span>
+       <button class="primary" onclick="openGenerate()">Review &amp; add</button></div>`);
+  }
+  $("nudge").innerHTML = banners.join("");
 
   // runway
   $("runwaySummary").textContent = DB.settings.horizonDays + "-day checking runway";
@@ -943,6 +986,7 @@ function renderLedger() {
   if (f === "upcoming") rows = rows.filter(e => e.status === "Pending" || e.date >= asOfD);
   else if (f === "cash") rows = rows.filter(e => e.cashImpact);
   else if (f === "cleared") rows = rows.filter(e => e.status === "Cleared");
+  else if (f === "stale") rows = STS.stalePending(DB, asOfD);
   rows = rows.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
   $("ledgerBody").innerHTML = rows.map(e => {
     const where = e.cardName ? "💳 " + esc(e.cardName) + (e.type === "card_payment" ? " ← " + esc(e.source) : "")
@@ -959,6 +1003,11 @@ function renderLedger() {
       <button class="mini danger" onclick="delEvent(${e.id})">×</button></td>
     </tr>`;
   }).join("") || '<tr><td colspan="7" style="color:var(--muted)">Nothing here.</td></tr>';
+}
+function openStaleReview() {
+  switchTab("ledger");
+  $("ledgerFilter").value = "stale";
+  renderLedger();
 }
 function toggleStatus(id) {
   const e = DB.ledger.find(x => x.id === id);
@@ -1016,20 +1065,32 @@ function openEditEvent(id) {
 // ---------------- cards tab ----------------
 function renderCards() {
   $("cardsBody").innerHTML = DB.cards.map((c, i) => {
-    const unf = STS.cardUnfunded(c);
+    const unf = STS.cardUnfunded(DB, c);
+    const newActivity = STS.cardNewActivity(DB, c);
     const auto = c.autopayMode + (c.autopayMode !== "Full" && c.autopayAmount ? " " + fmt$(c.autopayAmount) : "");
     return `<tr>
       <td>${esc(c.name)}${c.treatAs === "Debt" ? ' <span class="chip dim">debt</span>' : ""}</td>
-      <td class="num">${fmt$(c.balance)}</td>
+      <td class="num"><input type="number" step="0.01" value="${c.balance}" style="width:100px;text-align:right" onchange="setCardBalance(${i}, this.value)"></td>
+      <td class="num">${newActivity ? `<span class="chip warn">+${fmt$(newActivity)}</span>` : "—"}</td>
       <td class="num">${fmt$(c.statementBalance)}</td>
       <td>${c.dueDate ? fmtDate(c.dueDate) : ""}</td>
       <td>${esc(auto)}</td>
-      <td class="num">${fmt$(c.funded)}</td>
+      <td class="num"><input type="number" step="0.01" value="${c.funded}" style="width:100px;text-align:right" onchange="setCardFunded(${i}, this.value)"></td>
       <td class="num">${unf > 0 ? `<span class="chip warn">${fmt$(unf)}</span>` : fmt$(0)}</td>
       <td style="white-space:nowrap"><button class="mini" onclick="openReconcile(${i})">Reconcile</button>
       <button class="mini danger" onclick="delCard(${i})">×</button></td>
     </tr>`;
   }).join("");
+}
+function setCardBalance(i, v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) { render(); return; }
+  DB.cards[i].balance = STS.r2(n); save();
+}
+function setCardFunded(i, v) {
+  const n = parseFloat(v);
+  if (isNaN(n) || n < 0) { render(); return; }
+  DB.cards[i].funded = STS.r2(n); save();
 }
 function delCard(i) {
   const c = DB.cards[i];
@@ -1041,11 +1102,14 @@ function openReconcile(i) {
     ? { name: "", balance: 0, statementBalance: 0, dueDate: STS.asOf(DB), autopayMode: "Full", autopayAmount: null, funded: 0, activeForSpend: true, treatAs: "Card", payFrom: (spendableAccounts()[0] || {}).name || "" }
     : DB.cards[i];
   const acctOpts = spendableAccounts().map(a => `<option ${a.name === c.payFrom ? "selected" : ""}>${esc(a.name)}</option>`).join("");
+  const liveOwed = isNew ? 0 : STS.cardOwedNow(DB, c);
+  const newActivity = isNew ? 0 : STS.cardNewActivity(DB, c);
   openDlg(`
     <h3>${isNew ? "Add card" : "Reconcile " + esc(c.name) + " to its statement"}</h3>
     ${isNew ? `<div class="frow"><div class="f"><span>Card name</span><input id="rcName" size="24"></div></div>` : ""}
+    ${newActivity ? `<p class="hint" style="margin-top:0">${fmt$(newActivity)} in new purchases/refunds have posted since the last reconcile — folded into the statement balance below. Adjust it to match the real paper statement if it differs.</p>` : ""}
     <div class="frow">
-      <div class="f"><span>Statement balance</span><input type="number" step="0.01" id="rcStmt" value="${c.statementBalance}" style="width:120px"></div>
+      <div class="f"><span>Statement balance</span><input type="number" step="0.01" id="rcStmt" value="${liveOwed}" style="width:120px"></div>
       <div class="f"><span>Due date</span><input type="date" id="rcDue" value="${esc(c.dueDate || "")}"></div>
       <div class="f"><span>Current balance (owed now)</span><input type="number" step="0.01" id="rcBal" value="${c.balance}" style="width:120px"></div>
     </div>
@@ -1070,7 +1134,7 @@ function openReconcile(i) {
     else { payBox.disabled = false; if (!payBox.value) payBox.value = c.autopayAmount || ""; }
   };
   $("rcMode").onchange = syncPay; $("rcStmt").oninput = () => { if ($("rcMode").value === "Full") payBox.value = $("rcStmt").value; };
-  payBox.value = c.autopayMode === "Full" ? c.statementBalance : (c.autopayAmount || "");
+  payBox.value = c.autopayMode === "Full" ? liveOwed : (c.autopayAmount || "");
   syncPay();
   $("rcSave").onclick = () => {
     const stmt = parseFloat($("rcStmt").value) || 0;
@@ -1085,6 +1149,7 @@ function openReconcile(i) {
     c.statementBalance = STS.r2(stmt);
     c.balance = STS.r2(parseFloat($("rcBal").value) || 0);
     c.dueDate = due;
+    c.reconciledThrough = STS.asOf(DB);
     c.autopayMode = $("rcMode").value;
     c.autopayAmount = c.autopayMode === "Full" ? null : STS.r2(pay);
     c.funded = STS.r2(parseFloat($("rcFunded").value) || 0);
