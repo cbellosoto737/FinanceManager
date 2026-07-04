@@ -33,6 +33,20 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   either way, exactly like the "no double counting" rule for any other card purchase. The two rows
   are tagged ("↳ pays down X" / "debt paydown") so they're never mistaken for duplicates — deleting
   either one prompts to delete both together, since one without the other leaves the numbers wrong.
+- **Accounts** (checking/savings) are a manual snapshot, not computed from the ledger — unlike Cards.
+  Update a checking balance whenever you glance at your bank, the same way you'd correct any account
+  balance. This is deliberate: a checking account has constant small untracked activity (debit
+  swipes, fees, interest) that would make a fully ledger-derived balance impractical to maintain.
+  The ledger only needs to carry what's *upcoming* (scheduled bills, an expected paycheck) so the
+  projection can look forward from today's real balance — not a full transaction history. One
+  consequence: if you update an account's balance to reflect something that already happened (a
+  paycheck landing, a bill posting), also mark the matching ledger row **Cleared** — otherwise
+  it's still "scheduled" and gets counted a second time.
+- **Recurring bills** support **Kind: Income** for predictable inflows like a paycheck — set it up
+  once (amount, cadence, which checking account it lands in) and **Generate upcoming bills** keeps
+  depositing it every payday, the same low-maintenance way expenses work, instead of a manual
+  "Add something → Money in" entry every pay period. One-off income (a bonus, a refund) still goes
+  through quick-add on the Ledger tab.
 
 ## First run
 
@@ -48,7 +62,8 @@ low **−$1,296.19 on Aug 5**.
 3. **Cards** tab: click **+ Add card** for each one and enter what it currently owes as its
    starting balance, plus its statement/due date/autopay. That schedules the statement payment
    automatically — balance and unfunded take it from there on their own.
-4. **Recurring** tab: enter your repeating bills, then click **Generate upcoming bills**.
+4. **Recurring** tab: enter your repeating bills — and your paycheck too, with **Kind: Income** —
+   then click **Generate upcoming bills**.
 5. **Settings** tab: set paydays, net paycheck, cash reserve — and switch "Today" from the fixed
    seed date to **use the real current date**.
 6. Delete the leftover sample ledger rows (Ledger tab), or Reset to seed first and rebuild clean.

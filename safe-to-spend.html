@@ -303,7 +303,7 @@
   </section>
 
   <section class="panel card" id="panel-recurring">
-    <h2>Recurring bills</h2>
+    <h2>Recurring bills &amp; income</h2>
     <div class="frow">
       <button class="primary" id="genRecurringBtn">Generate upcoming bills</button>
       <button class="ghost" id="addRecurringBtn">+ Add recurring bill</button>
@@ -319,7 +319,9 @@
     only and aren’t generated. A bill whose real-world payment is charged to a credit card rather than paid
     from checking — a debt paid via a card, a store financing plan — should be paid with that card here rather
     than tracked as its own scheduled card payment; if it's also a debt you're tracking on the Cards tab, set
-    <b>Pays down debt</b> so each occurrence both charges the card and reduces that debt's balance automatically.</p>
+    <b>Pays down debt</b> so each occurrence both charges the card and reduces that debt's balance automatically.
+    Set <b>Kind: Income</b> to set up your paycheck once here — each payday it lands in the projection
+    automatically, without a manual "Add something" entry every pay period.</p>
   </section>
 
   <section class="panel card" id="panel-import">
@@ -643,8 +645,18 @@ const STS = (() => {
     return out;
   }
   // Build the ledger event for a recurring instance. Card-charged bills have no cash impact
-  // (they land on the card and leave checking via the statement payment).
+  // (they land on the card and leave checking via the statement payment). A recurring paycheck (or
+  // any other predictable income) deposits into a checking account instead -- always cash-impacting,
+  // since income has nowhere else to "land" the way a card charge does.
   function instanceEvent(db, t, date) {
+    if (t.kind === "income") {
+      return {
+        date, type: "income", description: t.name, category: t.category || "Income",
+        amount: r2(Math.abs(t.amount)), source: "", dest: t.payMethod, payMethod: "ACH", cardName: "",
+        cashImpact: true, mandatory: !!t.mandatory, status: "Pending", inSTS: true,
+        recurringId: t.id, notes: ""
+      };
+    }
     const isCard = db.cards.some(c => c.name === t.payMethod);
     return {
       date, type: "recurring", description: t.name, category: t.category,
@@ -1294,8 +1306,9 @@ function openAddAccount() {
 // ---------------- recurring tab ----------------
 function renderRecurring() {
   $("recurringBody").innerHTML = DB.recurring.map((t, i) => `<tr>
-    <td>${esc(t.name)}</td><td>${esc(t.category)}</td>
-    <td class="num">${fmt$(t.amount)}</td><td>${esc(t.frequency)}</td>
+    <td>${esc(t.name)}${t.kind === "income" ? ' <span class="chip good">income</span>' : ""}</td>
+    <td>${esc(t.category)}</td>
+    <td class="num ${t.kind === "income" ? "amt-pos" : ""}">${fmt$(t.amount)}</td><td>${esc(t.frequency)}</td>
     <td>${t.nextDate ? fmtDate(t.nextDate) : "varies"}</td>
     <td>${esc(t.payMethod)}${t.payDownDebt ? ` <span class="chip warn">→ pays down ${esc(t.payDownDebt)}</span>` : ""}</td>
     <td>${t.mandatory ? "yes" : ""}</td>
@@ -1309,42 +1322,51 @@ function delRecurring(i) {
 }
 function openEditRecurring(i) {
   const isNew = i < 0;
-  const t = isNew ? { id: "", name: "", category: "", amount: 0, frequency: "Monthly", nextDate: STS.asOf(DB), payMethod: "", payDownDebt: "", autopay: true, mandatory: true } : DB.recurring[i];
-  const methods = [...spendableAccounts().map(a => a.name), ...DB.cards.map(c => c.name)];
+  const t = isNew ? { id: "", name: "", category: "", amount: 0, frequency: "Monthly", nextDate: STS.asOf(DB), payMethod: "", payDownDebt: "", kind: "expense", autopay: true, mandatory: true } : DB.recurring[i];
   const debtCards = DB.cards.filter(c => c.treatAs === "Debt");
+  const renderPayOptions = kind => (kind === "income" ? spendableAccounts().map(a => a.name) : [...spendableAccounts().map(a => a.name), ...DB.cards.map(c => c.name)])
+    .map(m => `<option ${m === t.payMethod ? "selected" : ""}>${esc(m)}</option>`).join("");
   openDlg(`
     <h3>${isNew ? "Add recurring bill" : "Edit " + esc(t.name)}</h3>
     <div class="frow">
-      <div class="f"><span>Name</span><input id="rrName" value="${esc(t.name)}" size="20"></div>
+      <div class="f"><span>Name</span><input id="rrName" value="${esc(t.name)}" size="20" placeholder="e.g. Paycheck"></div>
+      <div class="f"><span>Kind</span><select id="rrKind"><option value="expense" ${t.kind !== "income" ? "selected" : ""}>Expense</option><option value="income" ${t.kind === "income" ? "selected" : ""}>Income</option></select></div>
       <div class="f"><span>Amount</span><input id="rrAmt" type="number" step="0.01" min="0" value="${t.amount}" style="width:100px"></div>
       <div class="f"><span>Frequency</span><select id="rrFreq">${["Weekly", "Biweekly", "Monthly", "Yearly", "Monthly-est"].map(f => `<option ${f === t.frequency ? "selected" : ""}>${f}</option>`).join("")}</select></div>
       <div class="f"><span>Next date</span><input id="rrNext" type="date" value="${esc(t.nextDate || "")}"></div>
     </div>
     <div class="frow">
-      <div class="f"><span>Paid with</span><select id="rrPay">${methods.map(m => `<option ${m === t.payMethod ? "selected" : ""}>${esc(m)}</option>`).join("")}</select></div>
+      <div class="f"><span id="rrPayLabel">${t.kind === "income" ? "Deposited into" : "Paid with"}</span><select id="rrPay">${renderPayOptions(t.kind)}</select></div>
       <div class="f"><span>Category</span><input id="rrCat" value="${esc(t.category)}" size="14"></div>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="rrMand" ${t.mandatory ? "checked" : ""}> mandatory</label>
     </div>
-    ${debtCards.length ? `<div class="frow">
+    <div id="rrDebtRow">${debtCards.length ? `<div class="frow">
       <div class="f"><span title="Only makes sense when 'Paid with' above is a credit card: each payment charges that card AND pays this debt down by the same amount.">Pays down debt (optional)</span>
         <select id="rrDebt">
           <option value="">— none, just an expense —</option>
           ${debtCards.map(c => `<option value="${esc(c.name)}" ${c.name === t.payDownDebt ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
         </select></div>
-    </div>` : ""}
+    </div>` : ""}</div>
     <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="rrSave">Save</button></div>
   `);
+  $("rrKind").onchange = () => {
+    const kind = $("rrKind").value;
+    $("rrPayLabel").textContent = kind === "income" ? "Deposited into" : "Paid with";
+    $("rrPay").innerHTML = renderPayOptions(kind);
+    $("rrDebtRow").style.display = kind === "income" ? "none" : "";
+  };
   $("rrSave").onclick = () => {
     const name = $("rrName").value.trim();
     const amt = parseFloat($("rrAmt").value);
+    const kind = $("rrKind").value;
     if (!name) { alert("Name the bill."); return; }
     if (isNaN(amt) || amt < 0) { alert("Amount must be a positive number."); return; }
-    const payDownDebt = debtCards.length ? $("rrDebt").value : "";
+    const payDownDebt = kind !== "income" && debtCards.length ? $("rrDebt").value : "";
     if (payDownDebt && !DB.cards.some(c => c.name === $("rrPay").value)) {
       alert("Paying down a debt requires paying with a credit card, not a checking account — change \"Paid with\" to the card you're actually charging."); return;
     }
     t.name = name; t.amount = STS.r2(amt); t.frequency = $("rrFreq").value;
-    t.nextDate = $("rrNext").value || null; t.payMethod = $("rrPay").value;
+    t.nextDate = $("rrNext").value || null; t.payMethod = $("rrPay").value; t.kind = kind;
     t.category = $("rrCat").value.trim(); t.mandatory = $("rrMand").checked;
     t.payDownDebt = payDownDebt || null;
     if (isNew) {
@@ -1362,7 +1384,7 @@ function openGenerate() {
     <h3>Add upcoming bills to the ledger</h3>
     <div class="checklist">${missing.map((m, i) => `
       <label><input type="checkbox" data-gen="${i}" checked>
-      <span>${esc(m.template.name)} — ${fmt$(-m.template.amount)} <span style="color:var(--muted)">(${esc(m.template.payMethod)}${m.template.payDownDebt ? " → pays down " + esc(m.template.payDownDebt) : ""})</span></span>
+      <span>${esc(m.template.name)} — ${fmt$(m.template.kind === "income" ? m.template.amount : -m.template.amount)} <span style="color:var(--muted)">(${esc(m.template.payMethod)}${m.template.payDownDebt ? " → pays down " + esc(m.template.payDownDebt) : ""})</span></span>
       <span class="when">${fmtDateLong(m.date)}</span></label>`).join("")}
     </div>
     <p class="hint" style="margin:8px 0 0">These are added as Pending. Card-charged bills sit on the card (no cash impact) until the statement payment; checking-charged bills hit the projection directly. A bill that pays down a debt also logs that debt's paydown automatically.</p>
