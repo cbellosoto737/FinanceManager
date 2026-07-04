@@ -282,11 +282,12 @@
     </div>
     <p class="hint"><b>Balance</b> and <b>Funded</b> are both calculated, never typed in directly. Balance starts
     from whatever you set at <b>Balance as of</b> and rolls forward with every purchase, refund, and posted
-    payment dated after that date. Funded is whatever payment is currently scheduled for this card; Unfunded is
-    the gap. To set or correct a card's starting balance (e.g. when you first add it, or you're backfilling
-    purchases that happened after your last statement closed), hit <b>Reconcile</b> — set "Balance as of" to the
-    date your statement actually covers through (not necessarily today), and anything you log dated after that
-    rolls in automatically. Saving also schedules the payment (full / minimum / custom, per the card's autopay).</p>
+    payment dated on or after that date. Funded is whatever payment is currently scheduled for this card;
+    Unfunded is the gap. To set or correct a card's starting balance (e.g. when you first add it, or you're
+    backfilling purchases that happened after your last statement closed), hit <b>Reconcile</b> — set "Balance
+    as of" to the date your statement actually covers through (not necessarily today), and anything you log
+    dated that day or later rolls in automatically. Saving also schedules the payment (full / minimum / custom,
+    per the card's autopay).</p>
   </section>
 
   <section class="panel card" id="panel-accounts">
@@ -299,11 +300,12 @@
     </div>
     <div class="frow" style="margin-top:12px"><button class="ghost" id="addAcctBtn">+ Add account</button></div>
     <p class="hint">Spendable accounts (your checking) feed the headline number. Savings are backup only —
-    they only count in Aggressive mode. Like Cards, <b>Balance</b> is a running total: it starts from
-    whatever you last confirmed here and rolls forward automatically with every <b>Cleared</b>
-    cash-impact ledger entry touching this account — mark a bill or paycheck Cleared once it actually
-    posts and the balance updates itself, no manual retyping needed. Typing a new number here (e.g. to
-    correct drift, or the first time you add the account) resets that starting point to today.</p>
+    they only count in Aggressive mode. Like Cards, <b>Balance</b> is calculated, never typed in directly:
+    it starts from whatever you set at <b>Balance as of</b> and rolls forward automatically with every
+    <b>Cleared</b> cash-impact ledger entry touching this account dated on or after that day — mark a bill or
+    paycheck Cleared once it actually posts and the balance updates itself, no manual retyping needed. Hit
+    <b>Edit</b> to correct drift or set the starting point — set "Balance as of" to whatever date that number
+    is actually accurate for (not necessarily today, e.g. when backfilling older activity).</p>
   </section>
 
   <section class="panel card" id="panel-recurring">
@@ -525,17 +527,20 @@ const STS = (() => {
   // folded into the account's computed balance (below), so counting it here too would double it.
   const countsInWindow = e => isCash(e) && e.status === "Pending";
 
-  // An account's balance is a running total, exactly like a card's: a.balance is the last confirmed
-  // snapshot (as of a.reconciledThrough), and every Cleared cash-impact event touching this account
-  // (as source or dest) since then rolls forward automatically. A still-Pending event hasn't actually
-  // happened yet, so it stays out of the balance and shows up in the projection/window instead --
-  // that split is what keeps this from ever double-counting the same dollar twice.
+  // An account's balance is a running total, exactly like a card's: a.balance is what it was at the
+  // START of a.reconciledThrough, and every Cleared cash-impact event touching this account (as
+  // source or dest) dated ON OR AFTER that day rolls forward automatically. A still-Pending event
+  // hasn't actually happened yet, so it stays out of the balance and shows up in the
+  // projection/window instead -- that split is what keeps this from ever double-counting the same
+  // dollar twice. The boundary must be inclusive (>=, not >): a balance reconciled "today" and a
+  // brand-new transaction also dated "today" are both normal, and excluding same-day activity would
+  // make it vanish the instant it's marked Cleared -- neither bucket would ever pick it up again.
   const accountAnchorDate = a => a.reconciledThrough || "0000-00-00";
   function accountNewActivity(db, a) {
     let delta = 0;
     const anchor = accountAnchorDate(a);
     for (const e of db.ledger) {
-      if (isCash(e) && e.status === "Cleared" && e.date > anchor && (e.source === a.name || e.dest === a.name)) delta += e.amount;
+      if (isCash(e) && e.status === "Cleared" && e.date >= anchor && (e.source === a.name || e.dest === a.name)) delta += e.amount;
     }
     return r2(delta);
   }
@@ -552,20 +557,22 @@ const STS = (() => {
   const spendableChecking = db => r2(db.accounts.filter(a => a.spendable).reduce((s, a) => s + accountBalanceNow(db, a), 0));
   const savingsBackup = db => r2(db.accounts.filter(a => a.type === "Savings").reduce((s, a) => s + accountBalanceNow(db, a), 0));
 
-  // A card's balance is never typed in directly — it's a running total. c.balance is just the last
-  // confirmed snapshot (as of c.reconciledThrough, set whenever you Reconcile); everything charged,
-  // refunded, or actually paid since then rolls forward automatically. Falls back to dueDate for
-  // cards saved before this field existed, since that's the closest anchor already on hand.
+  // A card's balance is never typed in directly — it's a running total. c.balance is what it owed at
+  // the START of c.reconciledThrough (set whenever you Reconcile); everything charged, refunded, or
+  // actually paid on or after that day rolls forward automatically. Falls back to dueDate for cards
+  // saved before this field existed, since that's the closest anchor already on hand.
   const cardAnchorDate = c => c.reconciledThrough || c.dueDate || "0000-00-00";
 
   // Purchases/refunds/recurring charged to the card since the last reconcile — a quick "you've spent
   // more since your last statement" signal. planned_spend is explicitly a maybe ("optional - can
-  // cancel"), so it's excluded until it becomes real; card_payment is handled separately below.
+  // cancel"), so it's excluded until it becomes real; card_payment is handled separately below. The
+  // boundary is inclusive (>=, not >) -- see accountNewActivity above for why: a same-day purchase
+  // must not vanish the instant it's logged against a card reconciled that same day.
   function cardNewActivity(db, c) {
     let delta = 0;
     const anchor = cardAnchorDate(c);
     for (const e of db.ledger) {
-      if (notVoid(e) && e.cardName === c.name && e.type !== "card_payment" && e.type !== "planned_spend" && e.date > anchor) delta += -e.amount;
+      if (notVoid(e) && e.cardName === c.name && e.type !== "card_payment" && e.type !== "planned_spend" && e.date >= anchor) delta += -e.amount;
     }
     return r2(delta);
   }
@@ -577,7 +584,7 @@ const STS = (() => {
     const anchor = cardAnchorDate(c);
     let owed = +c.balance || 0;
     for (const e of db.ledger) {
-      if (!notVoid(e) || e.cardName !== c.name || e.date <= anchor) continue;
+      if (!notVoid(e) || e.cardName !== c.name || e.date < anchor) continue;
       if (e.type === "planned_spend") continue;
       if (e.type === "card_payment") { if (e.status === "Cleared") owed += e.amount; }
       else owed += -e.amount;
@@ -1227,14 +1234,14 @@ function openReconcile(i) {
     ${isNew ? `<div class="frow"><div class="f"><span>Card name</span><input id="rcName" size="24"></div></div>` : ""}
     ${isNew
       ? `<p class="hint" style="margin-top:0">Enter what this card currently owes — that becomes its starting balance.
-         Every purchase, refund, and payment you log dated after the "as of" date below is tracked automatically on top of it.</p>`
-      : `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveOwed)}</b> owed${newActivity ? ` (includes ${fmt$(newActivity)} in new purchases/refunds logged after the "as of" date below)` : ""},
+         Every purchase, refund, and payment you log dated on or after the "as of" date below is tracked automatically on top of it.</p>`
+      : `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveOwed)}</b> owed${newActivity ? ` (includes ${fmt$(newActivity)} in new purchases/refunds logged on or after the "as of" date below)` : ""},
          <b>${fmt$(liveFunded)}</b> already scheduled to be paid. Check this against your real statement and adjust below if it's different —
          saving resets the starting point so the running balance starts fresh from there.</p>`
     }
     <div class="frow">
       <div class="f"><span>${isNew ? "Starting balance" : "Statement balance"}</span><input type="number" step="0.01" id="rcStmt" value="${liveOwed}" style="width:120px"></div>
-      <div class="f"><span title="The last day this balance already accounts for. Anything you log dated AFTER this date counts as new.">Balance as of</span><input type="date" id="rcAsOf" value="${esc(STS.cardAnchorDate(c))}"></div>
+      <div class="f"><span title="What this card owed at the start of this day. Anything you log dated on or after this date counts as new.">Balance as of</span><input type="date" id="rcAsOf" value="${esc(STS.cardAnchorDate(c))}"></div>
       <div class="f"><span>Due date</span><input type="date" id="rcDue" value="${esc(c.dueDate || "")}"></div>
       <div class="f"><span>Pay from</span><select id="rcFrom">${acctOpts}</select></div>
     </div>
@@ -1303,43 +1310,58 @@ function renderAccounts() {
     const newActivity = STS.accountNewActivity(DB, a);
     return `<tr>
     <td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${esc(a.institution || "")}</td>
-    <td class="num"><input type="number" step="0.01" value="${bal}" style="width:110px;text-align:right" onchange="setBalance(${i}, this.value)"></td>
+    <td class="num">${fmt$(bal)}</td>
     <td class="num">${newActivity ? `<span class="chip ${newActivity > 0 ? "good" : "warn"}">${newActivity > 0 ? "+" : ""}${fmt$(newActivity)}</span>` : "—"}</td>
     <td>${a.spendable ? '<span class="chip good">yes</span>' : '<span class="chip dim">no</span>'}</td>
-    <td><button class="mini danger" onclick="delAccount(${i})">×</button></td>
+    <td style="white-space:nowrap"><button class="mini" onclick="openEditAccount(${i})">Edit</button>
+    <button class="mini danger" onclick="delAccount(${i})">×</button></td>
   </tr>`;
   }).join("");
-}
-function setBalance(i, v) {
-  const n = parseFloat(v);
-  if (isNaN(n)) { render(); return; }
-  DB.accounts[i].balance = STS.r2(n);
-  DB.accounts[i].reconciledThrough = STS.asOf(DB);
-  save();
 }
 function delAccount(i) {
   const a = DB.accounts[i];
   if (confirm(`Remove account "${a.name}"?`)) { DB.accounts.splice(i, 1); save(); }
 }
-function openAddAccount() {
+function openEditAccount(i) {
+  const isNew = i < 0;
+  const a = isNew
+    ? { name: "", type: "Checking", institution: "", balance: 0, spendable: true, reconciledThrough: STS.asOf(DB) }
+    : DB.accounts[i];
+  const liveBal = isNew ? 0 : STS.accountBalanceNow(DB, a);
+  const newActivity = isNew ? 0 : STS.accountNewActivity(DB, a);
   openDlg(`
-    <h3>Add account</h3>
+    <h3>${isNew ? "Add account" : "Edit " + esc(a.name)}</h3>
+    ${isNew ? `<div class="frow"><div class="f"><span>Name</span><input id="acName" size="22"></div></div>` : ""}
+    ${!isNew && newActivity ? `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveBal)}</b> (includes ${fmt$(newActivity)}
+       in Cleared activity logged on or after "Balance as of"). Adjust below if it's drifted from your real bank balance —
+       saving resets the starting point so the running balance starts fresh from there.</p>` : ""}
     <div class="frow">
-      <div class="f"><span>Name</span><input id="acName" size="22"></div>
-      <div class="f"><span>Type</span><select id="acType"><option>Checking</option><option>Savings</option><option>Investment</option></select></div>
-      <div class="f"><span>Institution</span><input id="acInst" size="14"></div>
-      <div class="f"><span>Balance</span><input id="acBal" type="number" step="0.01" value="0" style="width:110px"></div>
+      <div class="f"><span>Type</span><select id="acType"><option ${a.type === "Checking" ? "selected" : ""}>Checking</option><option ${a.type === "Savings" ? "selected" : ""}>Savings</option><option ${a.type === "Investment" ? "selected" : ""}>Investment</option></select></div>
+      <div class="f"><span>Institution</span><input id="acInst" value="${esc(a.institution || "")}" size="14"></div>
     </div>
-    <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="acSpend"> spendable (counts toward Safe to Spend)</label>
-    <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="acSave">Add</button></div>
+    <div class="frow">
+      <div class="f"><span>Balance</span><input id="acBal" type="number" step="0.01" value="${isNew ? 0 : liveBal}" style="width:110px"></div>
+      <div class="f"><span title="What this account held at the start of this day. Anything you log dated on or after this date counts as new.">Balance as of</span><input type="date" id="acAsOf" value="${esc(STS.accountAnchorDate(a))}"></div>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="acSpend" ${a.spendable ? "checked" : ""}> spendable (counts toward Safe to Spend)</label>
+    <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="acSave">${isNew ? "Add" : "Save"}</button></div>
   `);
-  $("acType").onchange = () => { $("acSpend").checked = $("acType").value === "Checking"; };
-  $("acSpend").checked = true;
+  $("acType").onchange = () => { if (isNew) $("acSpend").checked = $("acType").value === "Checking"; };
   $("acSave").onclick = () => {
-    const name = $("acName").value.trim();
-    if (!name) { alert("Name the account."); return; }
-    if (DB.accounts.some(x => x.name === name) || DB.cards.some(x => x.name === name)) { alert("That name is taken."); return; }
-    DB.accounts.push({ name, type: $("acType").value, institution: $("acInst").value.trim(), balance: STS.r2(parseFloat($("acBal").value) || 0), spendable: $("acSpend").checked, reconciledThrough: STS.asOf(DB) });
+    const asOfEntered = $("acAsOf").value;
+    if (!asOfEntered) { alert("Pick the date this balance is accurate as of."); return; }
+    if (isNew) {
+      const name = $("acName").value.trim();
+      if (!name) { alert("Name the account."); return; }
+      if (DB.accounts.some(x => x.name === name) || DB.cards.some(x => x.name === name)) { alert("That name is taken."); return; }
+      a.name = name;
+      DB.accounts.push(a);
+    }
+    a.type = $("acType").value;
+    a.institution = $("acInst").value.trim();
+    a.balance = STS.r2(parseFloat($("acBal").value) || 0);
+    a.reconciledThrough = asOfEntered;
+    a.spendable = $("acSpend").checked;
     closeDlg(); save();
   };
 }
@@ -1608,7 +1630,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("qaAdd").addEventListener("click", quickAdd);
   $("ledgerFilter").addEventListener("change", renderLedger);
   $("addCardBtn").addEventListener("click", () => openReconcile(-1));
-  $("addAcctBtn").addEventListener("click", openAddAccount);
+  $("addAcctBtn").addEventListener("click", () => openEditAccount(-1));
   $("addRecurringBtn").addEventListener("click", () => openEditRecurring(-1));
   $("genRecurringBtn").addEventListener("click", openGenerate);
   $("impPreviewBtn").addEventListener("click", previewImport);

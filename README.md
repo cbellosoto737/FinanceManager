@@ -34,29 +34,30 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   are tagged ("↳ pays down X" / "debt paydown") so they're never mistaken for duplicates — deleting
   either one prompts to delete both together, since one without the other leaves the numbers wrong.
 - **Accounts** (checking/savings) work exactly like Cards: **Balance is calculated, not typed in.**
-  It starts from the last number you set and rolls forward automatically with every **Cleared**
-  cash-impact ledger entry touching that account — mark a bill or paycheck Cleared once it actually
-  posts and the balance updates itself; a still-**Pending** one stays out of it (it hasn't happened
-  yet, so it belongs to the forward projection instead). Typing a new balance resets the starting
-  point to today, useful for correcting drift or the first time you add an account. This is what
-  makes automating input later (CSV import, eventually a bank feed) actually work end to end: an
+  It starts from whatever you set at **Balance as of** and rolls forward automatically with every
+  **Cleared** cash-impact ledger entry touching that account dated on or after that day — mark a
+  bill or paycheck Cleared once it actually posts and the balance updates itself; a still-**Pending**
+  one stays out of it (it hasn't happened yet, so it belongs to the forward projection instead). Hit
+  **Edit** to correct drift or set the starting point, with an explicit date — not necessarily today.
+  This is what makes automating input later (CSV import, eventually a bank feed) work end to end: an
   imported transaction lands Cleared, and the balance it affects updates itself with no manual step.
+- **Recurring bills** support **Kind: Income** for predictable inflows like a paycheck — set it up
+  once (amount, cadence, which checking account it lands in) and **Generate upcoming bills** keeps
+  depositing it every payday, the same low-maintenance way expenses work, instead of a manual
+  "Add something → Money in" entry every pay period. One-off income (a bonus, a refund) still goes
+  through quick-add on the Ledger tab.
 
 ## The two clocks: "what's real right now" vs. "what's still coming"
 
 Every cash-impact ledger row is in exactly one of two buckets, never both — this is what keeps the
 whole app from ever double-counting a dollar:
 - **Cleared** = it actually happened. It's baked into the relevant account's or card's **Balance**
-  and is invisible to the projection/window from that point on.
+  (as of that account/card's own "Balance as of" date) and is invisible to the projection/window
+  from that point on.
 - **Pending** = scheduled but hasn't happened yet. It's invisible to Balance and instead drives the
   60-day projection and the pre-payday "scheduled outflows/inflows" figure.
 The instant something flips from Pending to Cleared, it moves from the second bucket to the first —
 nothing needs to be re-entered, and nothing is ever counted in both places at once.
-- **Recurring bills** support **Kind: Income** for predictable inflows like a paycheck — set it up
-  once (amount, cadence, which checking account it lands in) and **Generate upcoming bills** keeps
-  depositing it every payday, the same low-maintenance way expenses work, instead of a manual
-  "Add something → Money in" entry every pay period. One-off income (a bonus, a refund) still goes
-  through quick-add on the Ledger tab.
 
 ## First run
 
