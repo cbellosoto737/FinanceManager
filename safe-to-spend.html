@@ -293,13 +293,17 @@
     <h2>Accounts</h2>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Account</th><th>Type</th><th>Institution</th><th class="num">Balance</th><th>Spendable?</th><th></th></tr></thead>
+        <thead><tr><th>Account</th><th>Type</th><th>Institution</th><th class="num">Balance</th><th class="num">New since reconcile</th><th>Spendable?</th><th></th></tr></thead>
         <tbody id="accountsBody"></tbody>
       </table>
     </div>
     <div class="frow" style="margin-top:12px"><button class="ghost" id="addAcctBtn">+ Add account</button></div>
     <p class="hint">Spendable accounts (your checking) feed the headline number. Savings are backup only —
-    they only count in Aggressive mode. Update balances whenever you glance at your bank.</p>
+    they only count in Aggressive mode. Like Cards, <b>Balance</b> is a running total: it starts from
+    whatever you last confirmed here and rolls forward automatically with every <b>Cleared</b>
+    cash-impact ledger entry touching this account — mark a bill or paycheck Cleared once it actually
+    posts and the balance updates itself, no manual retyping needed. Typing a new number here (e.g. to
+    correct drift, or the first time you add the account) resets that starting point to today.</p>
   </section>
 
   <section class="panel card" id="panel-recurring">
@@ -516,11 +520,37 @@ const STS = (() => {
 
   const notVoid = e => e.status !== "Void";
   const isCash = e => e.cashImpact && notVoid(e);
-  // Counts toward the pre-payday window: still pending (even if overdue), or dated today/future.
-  const countsInWindow = (e, asOfD) => isCash(e) && (e.status === "Pending" || e.date >= asOfD);
+  // A cash-impact event counts toward "what's still coming before payday" only while it's Pending --
+  // still scheduled, hasn't actually happened yet. The moment it's Cleared, it's real and already
+  // folded into the account's computed balance (below), so counting it here too would double it.
+  const countsInWindow = e => isCash(e) && e.status === "Pending";
 
-  const spendableChecking = db => r2(db.accounts.filter(a => a.spendable).reduce((s, a) => s + (+a.balance || 0), 0));
-  const savingsBackup = db => r2(db.accounts.filter(a => a.type === "Savings").reduce((s, a) => s + (+a.balance || 0), 0));
+  // An account's balance is a running total, exactly like a card's: a.balance is the last confirmed
+  // snapshot (as of a.reconciledThrough), and every Cleared cash-impact event touching this account
+  // (as source or dest) since then rolls forward automatically. A still-Pending event hasn't actually
+  // happened yet, so it stays out of the balance and shows up in the projection/window instead --
+  // that split is what keeps this from ever double-counting the same dollar twice.
+  const accountAnchorDate = a => a.reconciledThrough || "0000-00-00";
+  function accountNewActivity(db, a) {
+    let delta = 0;
+    const anchor = accountAnchorDate(a);
+    for (const e of db.ledger) {
+      if (isCash(e) && e.status === "Cleared" && e.date > anchor && (e.source === a.name || e.dest === a.name)) delta += e.amount;
+    }
+    return r2(delta);
+  }
+  const accountBalanceNow = (db, a) => r2((+a.balance || 0) + accountNewActivity(db, a));
+  // New accounts/backups predating this feature have no reconciledThrough yet; ensureAccountAnchors
+  // (called on load) backfills it to "today" so existing typed-in balances aren't silently altered --
+  // only activity logged from that point forward starts rolling in automatically.
+  function ensureAccountAnchors(db) {
+    const a0 = asOf(db);
+    db.accounts.forEach(a => { if (!a.reconciledThrough) a.reconciledThrough = a0; });
+    return db;
+  }
+
+  const spendableChecking = db => r2(db.accounts.filter(a => a.spendable).reduce((s, a) => s + accountBalanceNow(db, a), 0));
+  const savingsBackup = db => r2(db.accounts.filter(a => a.type === "Savings").reduce((s, a) => s + accountBalanceNow(db, a), 0));
 
   // A card's balance is never typed in directly — it's a running total. c.balance is just the last
   // confirmed snapshot (as of c.reconciledThrough, set whenever you Reconcile); everything charged,
@@ -568,7 +598,7 @@ const STS = (() => {
   function windowFlows(db, asOfD, payday) {
     let inflow = 0, outflow = 0;
     for (const e of db.ledger) {
-      if (countsInWindow(e, asOfD) && e.date < payday) {
+      if (countsInWindow(e) && e.date < payday) {
         if (e.amount >= 0) inflow += e.amount; else outflow += e.amount;
       }
     }
@@ -599,8 +629,11 @@ const STS = (() => {
   function projection(db, asOfD, horizon, reserve) {
     const end = addDays(asOfD, horizon);
     const byDate = new Map();
+    // Only Pending events are layered on day-by-day here -- a Cleared one has already happened and
+    // is already part of the starting balance (spendableChecking, below), so replaying it again on
+    // its date would double it.
     for (const e of db.ledger) {
-      if (isCash(e) && e.date >= asOfD && e.date <= end) {
+      if (countsInWindow(e) && e.date >= asOfD && e.date <= end) {
         const m = byDate.get(e.date) || { inn: 0, out: 0 };
         if (e.amount >= 0) m.inn += e.amount; else m.out += e.amount;
         byDate.set(e.date, m);
@@ -858,6 +891,7 @@ const STS = (() => {
   return {
     r2, todayStr, toDate, toStr, addDays, daysBetween, addMonthsAnchored,
     asOf, effectiveNextPayday, spendableChecking, savingsBackup,
+    accountAnchorDate, accountNewActivity, accountBalanceNow, ensureAccountAnchors,
     cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardUnfunded, totalUnfunded,
     windowFlows, safeToSpend, projection,
     missingRecurring, instanceEvent, debtPaydownEvent, instanceEvents, occurrences,
@@ -878,10 +912,10 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const d = JSON.parse(raw);
-      if (d && d.settings && Array.isArray(d.ledger)) return d;
+      if (d && d.settings && Array.isArray(d.ledger)) return STS.ensureAccountAnchors(d);
     }
   } catch (e) { /* corrupted storage: fall through to seed */ }
-  return structuredClone(SEED);
+  return STS.ensureAccountAnchors(structuredClone(SEED));
 }
 function save() { localStorage.setItem(KEY, JSON.stringify(DB)); render(); }
 
@@ -1264,17 +1298,24 @@ function openReconcile(i) {
 
 // ---------------- accounts tab ----------------
 function renderAccounts() {
-  $("accountsBody").innerHTML = DB.accounts.map((a, i) => `<tr>
+  $("accountsBody").innerHTML = DB.accounts.map((a, i) => {
+    const bal = STS.accountBalanceNow(DB, a);
+    const newActivity = STS.accountNewActivity(DB, a);
+    return `<tr>
     <td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${esc(a.institution || "")}</td>
-    <td class="num"><input type="number" step="0.01" value="${a.balance}" style="width:110px;text-align:right" onchange="setBalance(${i}, this.value)"></td>
+    <td class="num"><input type="number" step="0.01" value="${bal}" style="width:110px;text-align:right" onchange="setBalance(${i}, this.value)"></td>
+    <td class="num">${newActivity ? `<span class="chip ${newActivity > 0 ? "good" : "warn"}">${newActivity > 0 ? "+" : ""}${fmt$(newActivity)}</span>` : "—"}</td>
     <td>${a.spendable ? '<span class="chip good">yes</span>' : '<span class="chip dim">no</span>'}</td>
     <td><button class="mini danger" onclick="delAccount(${i})">×</button></td>
-  </tr>`).join("");
+  </tr>`;
+  }).join("");
 }
 function setBalance(i, v) {
   const n = parseFloat(v);
   if (isNaN(n)) { render(); return; }
-  DB.accounts[i].balance = STS.r2(n); save();
+  DB.accounts[i].balance = STS.r2(n);
+  DB.accounts[i].reconciledThrough = STS.asOf(DB);
+  save();
 }
 function delAccount(i) {
   const a = DB.accounts[i];
@@ -1298,7 +1339,7 @@ function openAddAccount() {
     const name = $("acName").value.trim();
     if (!name) { alert("Name the account."); return; }
     if (DB.accounts.some(x => x.name === name) || DB.cards.some(x => x.name === name)) { alert("That name is taken."); return; }
-    DB.accounts.push({ name, type: $("acType").value, institution: $("acInst").value.trim(), balance: STS.r2(parseFloat($("acBal").value) || 0), spendable: $("acSpend").checked });
+    DB.accounts.push({ name, type: $("acType").value, institution: $("acInst").value.trim(), balance: STS.r2(parseFloat($("acBal").value) || 0), spendable: $("acSpend").checked, reconciledThrough: STS.asOf(DB) });
     closeDlg(); save();
   };
 }
@@ -1512,12 +1553,12 @@ async function importJson(file) {
     }
     if (!confirm("Replace everything currently in the app with this backup?")) return;
     d.nextId = d.nextId || Math.max(0, ...d.ledger.map(e => +e.id || 0)) + 1;
-    DB = d; save();
+    DB = STS.ensureAccountAnchors(d); save();
     alert("Backup loaded.");
   } catch (e) { alert("Couldn't read that file as JSON: " + e.message); }
 }
 function resetSeed() {
-  if (confirm("Throw away everything here and reload the sample seed data?")) { DB = structuredClone(SEED); save(); }
+  if (confirm("Throw away everything here and reload the sample seed data?")) { DB = STS.ensureAccountAnchors(structuredClone(SEED)); save(); }
 }
 
 // ---------------- settings tab ----------------

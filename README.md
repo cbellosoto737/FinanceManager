@@ -33,15 +33,25 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   either way, exactly like the "no double counting" rule for any other card purchase. The two rows
   are tagged ("↳ pays down X" / "debt paydown") so they're never mistaken for duplicates — deleting
   either one prompts to delete both together, since one without the other leaves the numbers wrong.
-- **Accounts** (checking/savings) are a manual snapshot, not computed from the ledger — unlike Cards.
-  Update a checking balance whenever you glance at your bank, the same way you'd correct any account
-  balance. This is deliberate: a checking account has constant small untracked activity (debit
-  swipes, fees, interest) that would make a fully ledger-derived balance impractical to maintain.
-  The ledger only needs to carry what's *upcoming* (scheduled bills, an expected paycheck) so the
-  projection can look forward from today's real balance — not a full transaction history. One
-  consequence: if you update an account's balance to reflect something that already happened (a
-  paycheck landing, a bill posting), also mark the matching ledger row **Cleared** — otherwise
-  it's still "scheduled" and gets counted a second time.
+- **Accounts** (checking/savings) work exactly like Cards: **Balance is calculated, not typed in.**
+  It starts from the last number you set and rolls forward automatically with every **Cleared**
+  cash-impact ledger entry touching that account — mark a bill or paycheck Cleared once it actually
+  posts and the balance updates itself; a still-**Pending** one stays out of it (it hasn't happened
+  yet, so it belongs to the forward projection instead). Typing a new balance resets the starting
+  point to today, useful for correcting drift or the first time you add an account. This is what
+  makes automating input later (CSV import, eventually a bank feed) actually work end to end: an
+  imported transaction lands Cleared, and the balance it affects updates itself with no manual step.
+
+## The two clocks: "what's real right now" vs. "what's still coming"
+
+Every cash-impact ledger row is in exactly one of two buckets, never both — this is what keeps the
+whole app from ever double-counting a dollar:
+- **Cleared** = it actually happened. It's baked into the relevant account's or card's **Balance**
+  and is invisible to the projection/window from that point on.
+- **Pending** = scheduled but hasn't happened yet. It's invisible to Balance and instead drives the
+  60-day projection and the pre-payday "scheduled outflows/inflows" figure.
+The instant something flips from Pending to Cleared, it moves from the second bucket to the first —
+nothing needs to be re-entered, and nothing is ever counted in both places at once.
 - **Recurring bills** support **Kind: Income** for predictable inflows like a paycheck — set it up
   once (amount, cadence, which checking account it lands in) and **Generate upcoming bills** keeps
   depositing it every payday, the same low-maintenance way expenses work, instead of a manual
@@ -57,8 +67,8 @@ low **−$1,296.19 on Aug 5**.
 ## Loading your real data
 
 1. Open **Backup → Export to JSON** first if you ever want the sample back (or just use *Reset to seed data*).
-2. **Accounts** tab: replace the sample accounts with yours and type in today's balances. Mark
-   only checking as *spendable*.
+2. **Accounts** tab: replace the sample accounts with yours and type in today's real balances (this
+   becomes the starting point everything rolls forward from). Mark only checking as *spendable*.
 3. **Cards** tab: click **+ Add card** for each one and enter what it currently owes as its
    starting balance, plus its statement/due date/autopay. That schedules the statement payment
    automatically — balance and unfunded take it from there on their own.
@@ -75,7 +85,8 @@ low **−$1,296.19 on Aug 5**.
    match pending items reconcile them instead of duplicating.
 2. **Click the yellow banner** if it appears ("N upcoming bills aren't in the ledger") — one
    click keeps the projection honest.
-3. **Update account balances** (Accounts tab) to whatever the bank shows — 30 seconds.
+3. **Mark things Cleared** as they actually post (bills, the paycheck) — account balances update
+   themselves from that. Only retype a balance if it's drifted from what your bank actually shows.
 
 When a card statement arrives, **Reconcile** it (two fields, one click). A surprise bill goes in
 via "Add something" on the Ledger tab in seconds.
