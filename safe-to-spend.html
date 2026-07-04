@@ -1044,7 +1044,10 @@ function renderLedger() {
       : esc(e.source || e.dest || "");
     const cash = e.cashImpact ? '<span class="chip dim">yes</span>' : '<span class="chip dim">card</span>';
     const st = e.status === "Pending" ? '<span class="chip warn">Pending</span>' : '<span class="chip good">Cleared</span>';
-    const kindTag = e.type === "card_payment" ? (e.cashImpact ? ' <span class="chip dim">transfer</span>' : ' <span class="chip dim">debt paydown</span>') : "";
+    const debtLinked = e.recurringId && DB.recurring.find(t => t.id === e.recurringId && t.payDownDebt);
+    const kindTag = e.type === "card_payment"
+      ? (e.cashImpact ? ' <span class="chip dim">transfer</span>' : ' <span class="chip dim">debt paydown</span>')
+      : debtLinked ? ` <span class="chip dim">↳ pays down ${esc(debtLinked.payDownDebt)}</span>` : "";
     return `<tr>
       <td>${fmtDate(e.date)}</td>
       <td>${esc(e.description)}${kindTag}</td>
@@ -1067,7 +1070,29 @@ function toggleStatus(id) {
 }
 function delEvent(id) {
   const e = DB.ledger.find(x => x.id === id);
-  if (e && confirm(`Delete "${e.description}" (${fmt$(e.amount)}) from the ledger?`)) {
+  if (!e) return;
+  // A debt-paydown bill logs two linked rows (the charge on the paying card + the paydown on the
+  // debt) that share a recurringId and date. Deleting only one silently breaks the pairing -- the
+  // charge would vanish from its card's balance, or the debt would stop reflecting the paydown --
+  // so flag it instead of a plain confirm().
+  const sibling = e.recurringId ? DB.ledger.find(x => x.id !== e.id && x.recurringId === e.recurringId && x.date === e.date) : null;
+  if (sibling) {
+    openDlg(`
+      <h3>Delete linked entries?</h3>
+      <p>"${esc(e.description)}" (${fmt$(e.amount)} on ${esc(e.cardName || e.source || "")}) is one half of a
+      debt-paydown pair — the other half (${fmt$(sibling.amount)} on ${esc(sibling.cardName || sibling.source || "")})
+      only makes sense together with it. Deleting just one leaves the other unpaired.</p>
+      <div class="dlg-actions">
+        <button class="ghost" onclick="closeDlg()">Cancel</button>
+        <button class="ghost" id="delOneBtn">Delete just this one</button>
+        <button class="danger" id="delBothBtn">Delete both</button>
+      </div>
+    `);
+    $("delOneBtn").onclick = () => { DB.ledger = DB.ledger.filter(x => x.id !== e.id); closeDlg(); save(); };
+    $("delBothBtn").onclick = () => { DB.ledger = DB.ledger.filter(x => x.id !== e.id && x.id !== sibling.id); closeDlg(); save(); };
+    return;
+  }
+  if (confirm(`Delete "${e.description}" (${fmt$(e.amount)}) from the ledger?`)) {
     DB.ledger = DB.ledger.filter(x => x.id !== id); save();
   }
 }

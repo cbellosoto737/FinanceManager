@@ -28,9 +28,11 @@ All data stays in that browser's local storage; nothing ever leaves your machine
 - A **debt paid via a credit card** (medical financing, a store card you settle with your rewards
   card, etc.) isn't a cash payment, so it can't use a card's normal "Pay from checking" schedule.
   Track it as a **Debt** card (its own balance on the Cards tab) and add its payment as a
-  **Recurring bill** with **Pays down debt** set — each occurrence both charges the paying card
-  (a real purchase) and reduces the debt's balance (a paydown), with no cash impact either way,
-  exactly like the "no double counting" rule for any other card purchase.
+  **Recurring bill** with **Pays down debt** set — each occurrence logs two linked ledger rows: a
+  charge on the paying card (a real purchase) and a paydown on the debt, with no cash impact
+  either way, exactly like the "no double counting" rule for any other card purchase. The two rows
+  are tagged ("↳ pays down X" / "debt paydown") so they're never mistaken for duplicates — deleting
+  either one prompts to delete both together, since one without the other leaves the numbers wrong.
 
 ## First run
 
