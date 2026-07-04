@@ -25,6 +25,12 @@ All data stays in that browser's local storage; nothing ever leaves your machine
 - Any **Pending** ledger item still dated more than 2 weeks in the past gets flagged in a banner —
   it's almost always a bill that already posted (mark it Cleared) or leftover cruft (delete it),
   and it silently drags your number down for as long as it sits there.
+- A **debt paid via a credit card** (medical financing, a store card you settle with your rewards
+  card, etc.) isn't a cash payment, so it can't use a card's normal "Pay from checking" schedule.
+  Track it as a **Debt** card (its own balance on the Cards tab) and add its payment as a
+  **Recurring bill** with **Pays down debt** set — each occurrence both charges the paying card
+  (a real purchase) and reduces the debt's balance (a paydown), with no cash impact either way,
+  exactly like the "no double counting" rule for any other card purchase.
 
 ## First run
 

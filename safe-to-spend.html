@@ -316,7 +316,10 @@
     </div>
     <p class="hint">“Generate upcoming bills” adds any instances missing from the ledger for the next 60 days —
     it never duplicates one that’s already there. Estimates with no fixed date (groceries, gas) are reference
-    only and aren’t generated.</p>
+    only and aren’t generated. A bill whose real-world payment is charged to a credit card rather than paid
+    from checking — a debt paid via a card, a store financing plan — should be paid with that card here rather
+    than tracked as its own scheduled card payment; if it's also a debt you're tracking on the Cards tab, set
+    <b>Pays down debt</b> so each occurrence both charges the card and reduces that debt's balance automatically.</p>
   </section>
 
   <section class="panel card" id="panel-import">
@@ -652,6 +655,26 @@ const STS = (() => {
       recurringId: t.id, notes: ""
     };
   }
+  // A debt paid via a credit card is a transfer between two card-like balances, not a cash
+  // transaction: charging payMethod raises what it owes (the instanceEvent above), and this paired
+  // event simultaneously lowers the debt by the same amount. cashImpact stays false (no cash left
+  // checking) and status is Cleared immediately (the paydown happens the moment the charge posts) --
+  // that combination makes it invisible to the checking projection and to "Funded" (which only looks
+  // for a Pending payment), while still counting toward the debt's Balance via the same rule an
+  // ordinary posted card payment already follows.
+  function debtPaydownEvent(t, date) {
+    if (!t.payDownDebt) return null;
+    return {
+      date, type: "card_payment", description: t.name, category: t.category,
+      amount: r2(-Math.abs(t.amount)), source: "", dest: t.payDownDebt, payMethod: "Card",
+      cardName: t.payDownDebt, cashImpact: false, mandatory: !!t.mandatory, status: "Cleared",
+      inSTS: false, recurringId: t.id, notes: "Paid via " + t.payMethod
+    };
+  }
+  function instanceEvents(db, t, date) {
+    const pd = debtPaydownEvent(t, date);
+    return pd ? [instanceEvent(db, t, date), pd] : [instanceEvent(db, t, date)];
+  }
 
   // ---------- CSV import (boundary: validate everything) ----------
   function parseCSV(text) {
@@ -825,7 +848,7 @@ const STS = (() => {
     asOf, effectiveNextPayday, spendableChecking, savingsBackup,
     cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardUnfunded, totalUnfunded,
     windowFlows, safeToSpend, projection,
-    missingRecurring, instanceEvent, occurrences,
+    missingRecurring, instanceEvent, debtPaydownEvent, instanceEvents, occurrences,
     parseCSV, parseDateLoose, parseAmountLoose, normalizeCsv, classifyImport,
     overduePendingOut, stalePending, computeAll
   };
@@ -1017,13 +1040,14 @@ function renderLedger() {
   else if (f === "stale") rows = STS.stalePending(DB, asOfD);
   rows = rows.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
   $("ledgerBody").innerHTML = rows.map(e => {
-    const where = e.cardName ? "💳 " + esc(e.cardName) + (e.type === "card_payment" ? " ← " + esc(e.source) : "")
+    const where = e.cardName ? "💳 " + esc(e.cardName) + (e.type === "card_payment" && e.cashImpact ? " ← " + esc(e.source) : "")
       : esc(e.source || e.dest || "");
     const cash = e.cashImpact ? '<span class="chip dim">yes</span>' : '<span class="chip dim">card</span>';
     const st = e.status === "Pending" ? '<span class="chip warn">Pending</span>' : '<span class="chip good">Cleared</span>';
+    const kindTag = e.type === "card_payment" ? (e.cashImpact ? ' <span class="chip dim">transfer</span>' : ' <span class="chip dim">debt paydown</span>') : "";
     return `<tr>
       <td>${fmtDate(e.date)}</td>
-      <td>${esc(e.description)}${e.type === "card_payment" ? ' <span class="chip dim">transfer</span>' : ""}</td>
+      <td>${esc(e.description)}${kindTag}</td>
       <td class="num ${e.amount >= 0 ? "amt-pos" : "amt-neg"}">${fmt$(e.amount)}</td>
       <td>${where}</td><td>${cash}</td>
       <td><button class="mini" onclick="toggleStatus(${e.id})">${st}</button></td>
@@ -1081,8 +1105,10 @@ function openEditEvent(id) {
     e.amount = STS.r2(amt); e.type = $("evType").value;
     e.source = $("evSrc").value; e.cardName = $("evCard").value;
     e.status = $("evStatus").value; e.category = $("evCat").value.trim(); e.notes = $("evNotes").value.trim();
-    // cash impact follows where the money moves: anything on a card except its statement payment stays on the card
-    e.cashImpact = e.type === "card_payment" ? true : !e.cardName;
+    // cash impact follows where the money moves: anything on a card except its statement payment stays on
+    // the card. A card_payment with no source account isn't a cash transfer at all -- it's a debt paid down
+    // by charging another card (see Recurring's "Pays down debt"), so it stays off the checking projection too.
+    e.cashImpact = e.type === "card_payment" ? !!e.source : !e.cardName;
     if (e.cardName && e.type !== "card_payment") { e.dest = e.cardName; e.payMethod = "Card"; }
     if (e.type === "card_payment" && e.cardName) e.dest = e.cardName;
     e.inSTS = e.type !== "card_payment";
@@ -1245,7 +1271,8 @@ function renderRecurring() {
   $("recurringBody").innerHTML = DB.recurring.map((t, i) => `<tr>
     <td>${esc(t.name)}</td><td>${esc(t.category)}</td>
     <td class="num">${fmt$(t.amount)}</td><td>${esc(t.frequency)}</td>
-    <td>${t.nextDate ? fmtDate(t.nextDate) : "varies"}</td><td>${esc(t.payMethod)}</td>
+    <td>${t.nextDate ? fmtDate(t.nextDate) : "varies"}</td>
+    <td>${esc(t.payMethod)}${t.payDownDebt ? ` <span class="chip warn">→ pays down ${esc(t.payDownDebt)}</span>` : ""}</td>
     <td>${t.mandatory ? "yes" : ""}</td>
     <td style="white-space:nowrap"><button class="mini" onclick="openEditRecurring(${i})">edit</button>
     <button class="mini danger" onclick="delRecurring(${i})">×</button></td>
@@ -1257,8 +1284,9 @@ function delRecurring(i) {
 }
 function openEditRecurring(i) {
   const isNew = i < 0;
-  const t = isNew ? { id: "", name: "", category: "", amount: 0, frequency: "Monthly", nextDate: STS.asOf(DB), payMethod: "", autopay: true, mandatory: true } : DB.recurring[i];
+  const t = isNew ? { id: "", name: "", category: "", amount: 0, frequency: "Monthly", nextDate: STS.asOf(DB), payMethod: "", payDownDebt: "", autopay: true, mandatory: true } : DB.recurring[i];
   const methods = [...spendableAccounts().map(a => a.name), ...DB.cards.map(c => c.name)];
+  const debtCards = DB.cards.filter(c => c.treatAs === "Debt");
   openDlg(`
     <h3>${isNew ? "Add recurring bill" : "Edit " + esc(t.name)}</h3>
     <div class="frow">
@@ -1272,6 +1300,13 @@ function openEditRecurring(i) {
       <div class="f"><span>Category</span><input id="rrCat" value="${esc(t.category)}" size="14"></div>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="rrMand" ${t.mandatory ? "checked" : ""}> mandatory</label>
     </div>
+    ${debtCards.length ? `<div class="frow">
+      <div class="f"><span title="Only makes sense when 'Paid with' above is a credit card: each payment charges that card AND pays this debt down by the same amount.">Pays down debt (optional)</span>
+        <select id="rrDebt">
+          <option value="">— none, just an expense —</option>
+          ${debtCards.map(c => `<option value="${esc(c.name)}" ${c.name === t.payDownDebt ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
+        </select></div>
+    </div>` : ""}
     <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="rrSave">Save</button></div>
   `);
   $("rrSave").onclick = () => {
@@ -1279,9 +1314,14 @@ function openEditRecurring(i) {
     const amt = parseFloat($("rrAmt").value);
     if (!name) { alert("Name the bill."); return; }
     if (isNaN(amt) || amt < 0) { alert("Amount must be a positive number."); return; }
+    const payDownDebt = debtCards.length ? $("rrDebt").value : "";
+    if (payDownDebt && !DB.cards.some(c => c.name === $("rrPay").value)) {
+      alert("Paying down a debt requires paying with a credit card, not a checking account — change \"Paid with\" to the card you're actually charging."); return;
+    }
     t.name = name; t.amount = STS.r2(amt); t.frequency = $("rrFreq").value;
     t.nextDate = $("rrNext").value || null; t.payMethod = $("rrPay").value;
     t.category = $("rrCat").value.trim(); t.mandatory = $("rrMand").checked;
+    t.payDownDebt = payDownDebt || null;
     if (isNew) {
       t.id = name.toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 10) || "R" + Date.now();
       while (DB.recurring.some(x => x.id === t.id)) t.id += "X";
@@ -1297,16 +1337,20 @@ function openGenerate() {
     <h3>Add upcoming bills to the ledger</h3>
     <div class="checklist">${missing.map((m, i) => `
       <label><input type="checkbox" data-gen="${i}" checked>
-      <span>${esc(m.template.name)} — ${fmt$(-m.template.amount)} <span style="color:var(--muted)">(${esc(m.template.payMethod)})</span></span>
+      <span>${esc(m.template.name)} — ${fmt$(-m.template.amount)} <span style="color:var(--muted)">(${esc(m.template.payMethod)}${m.template.payDownDebt ? " → pays down " + esc(m.template.payDownDebt) : ""})</span></span>
       <span class="when">${fmtDateLong(m.date)}</span></label>`).join("")}
     </div>
-    <p class="hint" style="margin:8px 0 0">These are added as Pending. Card-charged bills sit on the card (no cash impact) until the statement payment; checking-charged bills hit the projection directly.</p>
+    <p class="hint" style="margin:8px 0 0">These are added as Pending. Card-charged bills sit on the card (no cash impact) until the statement payment; checking-charged bills hit the projection directly. A bill that pays down a debt also logs that debt's paydown automatically.</p>
     <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="genSave">Add selected</button></div>
   `);
   $("genSave").onclick = () => {
     let n = 0;
     document.querySelectorAll("[data-gen]").forEach(cb => {
-      if (cb.checked) { const m = missing[+cb.dataset.gen]; DB.ledger.push({ id: useId(), ...STS.instanceEvent(DB, m.template, m.date) }); n++; }
+      if (cb.checked) {
+        const m = missing[+cb.dataset.gen];
+        STS.instanceEvents(DB, m.template, m.date).forEach(ev => DB.ledger.push({ id: useId(), ...ev }));
+        n++;
+      }
     });
     closeDlg();
     if (n) save();
