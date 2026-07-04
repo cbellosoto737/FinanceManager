@@ -281,11 +281,12 @@
       <button class="ghost" id="addCardBtn">+ Add card</button>
     </div>
     <p class="hint"><b>Balance</b> and <b>Funded</b> are both calculated, never typed in directly. Balance starts
-    from whatever you set the last time you reconciled and rolls forward with every purchase, refund, and posted
-    payment you log. Funded is whatever payment is currently scheduled for this card; Unfunded is the gap. To set
-    or correct a card's starting balance (e.g. when you first add it), hit <b>Reconcile</b> — it shows the live
-    calculated total and lets you adjust it to match your real statement; saving also schedules the payment
-    (full / minimum / custom, per the card's autopay) and resets "new since reconcile" to zero.</p>
+    from whatever you set at <b>Balance as of</b> and rolls forward with every purchase, refund, and posted
+    payment dated after that date. Funded is whatever payment is currently scheduled for this card; Unfunded is
+    the gap. To set or correct a card's starting balance (e.g. when you first add it, or you're backfilling
+    purchases that happened after your last statement closed), hit <b>Reconcile</b> — set "Balance as of" to the
+    date your statement actually covers through (not necessarily today), and anything you log dated after that
+    rolls in automatically. Saving also schedules the payment (full / minimum / custom, per the card's autopay).</p>
   </section>
 
   <section class="panel card" id="panel-accounts">
@@ -1129,13 +1130,14 @@ function openReconcile(i) {
     ${isNew ? `<div class="frow"><div class="f"><span>Card name</span><input id="rcName" size="24"></div></div>` : ""}
     ${isNew
       ? `<p class="hint" style="margin-top:0">Enter what this card currently owes — that becomes its starting balance.
-         Every purchase, refund, and payment you log from here on is tracked automatically on top of it.</p>`
-      : `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveOwed)}</b> owed${newActivity ? ` (includes ${fmt$(newActivity)} in new purchases/refunds since your last reconcile)` : ""},
+         Every purchase, refund, and payment you log dated after the "as of" date below is tracked automatically on top of it.</p>`
+      : `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveOwed)}</b> owed${newActivity ? ` (includes ${fmt$(newActivity)} in new purchases/refunds logged after the "as of" date below)` : ""},
          <b>${fmt$(liveFunded)}</b> already scheduled to be paid. Check this against your real statement and adjust below if it's different —
-         saving resets the starting point so the running balance starts fresh from here.</p>`
+         saving resets the starting point so the running balance starts fresh from there.</p>`
     }
     <div class="frow">
       <div class="f"><span>${isNew ? "Starting balance" : "Statement balance"}</span><input type="number" step="0.01" id="rcStmt" value="${liveOwed}" style="width:120px"></div>
+      <div class="f"><span title="The last day this balance already accounts for. Anything you log dated AFTER this date counts as new.">Balance as of</span><input type="date" id="rcAsOf" value="${esc(STS.cardAnchorDate(c))}"></div>
       <div class="f"><span>Due date</span><input type="date" id="rcDue" value="${esc(c.dueDate || "")}"></div>
       <div class="f"><span>Pay from</span><select id="rcFrom">${acctOpts}</select></div>
     </div>
@@ -1164,6 +1166,8 @@ function openReconcile(i) {
     const stmt = parseFloat($("rcStmt").value) || 0;
     const pay = parseFloat($("rcPay").value) || 0;
     const due = $("rcDue").value;
+    const asOfEntered = $("rcAsOf").value;
+    if (!asOfEntered) { alert("Pick the date this balance is accurate as of."); return; }
     if (isNew) {
       const name = $("rcName").value.trim();
       if (!name) { alert("Name the card."); return; }
@@ -1173,7 +1177,7 @@ function openReconcile(i) {
     c.statementBalance = STS.r2(stmt);
     c.balance = STS.r2(stmt);
     c.dueDate = due;
-    c.reconciledThrough = STS.asOf(DB);
+    c.reconciledThrough = asOfEntered;
     c.autopayMode = $("rcMode").value;
     c.autopayAmount = c.autopayMode === "Full" ? null : STS.r2(pay);
     c.payFrom = $("rcFrom").value;

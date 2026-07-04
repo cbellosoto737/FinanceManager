@@ -17,11 +17,11 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   new purchase only moves the headline **Safe to Spend** once it's actually scheduled to leave
   checking (Reconcile the card, or its statement due date falls before your next payday).
 - Each card's **balance** and **funded** are always *calculated*, never typed in directly. Balance
-  starts from whatever you last confirmed in **Reconcile** and rolls forward with every purchase,
-  refund, and posted payment you log; funded is simply whatever payment is currently scheduled for
-  that card. Unfunded is the gap. To set or correct a card's starting balance (e.g. when you first
-  add it), use **Reconcile** — it shows the live calculated total and lets you adjust it to match
-  your real statement.
+  starts from whatever you last confirmed in **Reconcile**, as of the **"Balance as of"** date you
+  set there, and rolls forward with every purchase, refund, and posted payment dated after that;
+  funded is simply whatever payment is currently scheduled for that card. Unfunded is the gap. If
+  you're backfilling a purchase that happened after your last statement closed, set "Balance as of"
+  to the statement's real cutoff (not necessarily today) so the purchase is picked up correctly.
 - Any **Pending** ledger item still dated more than 2 weeks in the past gets flagged in a banner —
   it's almost always a bill that already posted (mark it Cleared) or leftover cruft (delete it),
   and it silently drags your number down for as long as it sits there.
