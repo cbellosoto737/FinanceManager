@@ -16,9 +16,12 @@ All data stays in that browser's local storage; nothing ever leaves your machine
 - Only rows that actually move cash drive the checking projection and the headline number — a
   new purchase only moves the headline **Safe to Spend** once it's actually scheduled to leave
   checking (Reconcile the card, or its statement due date falls before your next payday).
-- Each card tracks **balance / statement / funded / unfunded** directly on the Cards tab —
-  balance and funded are edited inline; statement + due date + autopay go through **Reconcile**,
-  which also resets "new since statement" back to zero.
+- Each card's **balance** and **funded** are always *calculated*, never typed in directly. Balance
+  starts from whatever you last confirmed in **Reconcile** and rolls forward with every purchase,
+  refund, and posted payment you log; funded is simply whatever payment is currently scheduled for
+  that card. Unfunded is the gap. To set or correct a card's starting balance (e.g. when you first
+  add it), use **Reconcile** — it shows the live calculated total and lets you adjust it to match
+  your real statement.
 - Any **Pending** ledger item still dated more than 2 weeks in the past gets flagged in a banner —
   it's almost always a bill that already posted (mark it Cleared) or leftover cruft (delete it),
   and it silently drags your number down for as long as it sits there.
@@ -34,8 +37,9 @@ low **−$1,296.19 on Aug 5**.
 1. Open **Backup → Export to JSON** first if you ever want the sample back (or just use *Reset to seed data*).
 2. **Accounts** tab: replace the sample accounts with yours and type in today's balances. Mark
    only checking as *spendable*.
-3. **Cards** tab: add each card and hit **Reconcile** — statement balance, due date, autopay
-   mode. That schedules each statement payment automatically.
+3. **Cards** tab: click **+ Add card** for each one and enter what it currently owes as its
+   starting balance, plus its statement/due date/autopay. That schedules the statement payment
+   automatically — balance and unfunded take it from there on their own.
 4. **Recurring** tab: enter your repeating bills, then click **Generate upcoming bills**.
 5. **Settings** tab: set paydays, net paycheck, cash reserve — and switch "Today" from the fixed
    seed date to **use the real current date**.

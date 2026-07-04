@@ -273,18 +273,19 @@
     <h2>Credit cards</h2>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Card</th><th class="num">Balance</th><th class="num">New since statement</th><th class="num">Statement</th><th>Due</th><th>Autopay</th><th class="num">Funded</th><th class="num">Unfunded</th><th></th></tr></thead>
+        <thead><tr><th>Card</th><th class="num">Balance</th><th class="num">New since reconcile</th><th class="num">Statement</th><th>Due</th><th>Autopay</th><th class="num">Funded</th><th class="num">Unfunded</th><th></th></tr></thead>
         <tbody id="cardsBody"></tbody>
       </table>
     </div>
     <div class="frow" style="margin-top:12px">
       <button class="ghost" id="addCardBtn">+ Add card</button>
     </div>
-    <p class="hint"><b>Balance</b> and <b>Funded</b> are quick edits — click the number and type. <b>New since
-    statement</b> is anything charged or refunded on the card since your last reconcile; it's automatic, folded
-    straight into <b>Unfunded</b> (owed − funded) so a new purchase shows up here immediately. When a statement
-    arrives, hit <b>Reconcile</b>: it prefills the live total, and saving schedules the payment for you
-    (full / minimum / custom, per the card's autopay) and resets "new since statement" to zero.</p>
+    <p class="hint"><b>Balance</b> and <b>Funded</b> are both calculated, never typed in directly. Balance starts
+    from whatever you set the last time you reconciled and rolls forward with every purchase, refund, and posted
+    payment you log. Funded is whatever payment is currently scheduled for this card; Unfunded is the gap. To set
+    or correct a card's starting balance (e.g. when you first add it), hit <b>Reconcile</b> — it shows the live
+    calculated total and lets you adjust it to match your real statement; saving also schedules the payment
+    (full / minimum / custom, per the card's autopay) and resets "new since reconcile" to zero.</p>
   </section>
 
   <section class="panel card" id="panel-accounts">
@@ -515,11 +516,15 @@ const STS = (() => {
   const spendableChecking = db => r2(db.accounts.filter(a => a.spendable).reduce((s, a) => s + (+a.balance || 0), 0));
   const savingsBackup = db => r2(db.accounts.filter(a => a.type === "Savings").reduce((s, a) => s + (+a.balance || 0), 0));
 
-  // A card's last-reconciled statement is a snapshot; anything charged/refunded to the card AFTER that
-  // point is new activity the statement hasn't seen yet, and it isn't funded by definition. Falls back to
-  // dueDate for cards saved before this field existed, since that's the closest anchor already on hand.
-  // planned_spend is explicitly a maybe ("optional - can cancel"), so it's excluded until it becomes real.
+  // A card's balance is never typed in directly — it's a running total. c.balance is just the last
+  // confirmed snapshot (as of c.reconciledThrough, set whenever you Reconcile); everything charged,
+  // refunded, or actually paid since then rolls forward automatically. Falls back to dueDate for
+  // cards saved before this field existed, since that's the closest anchor already on hand.
   const cardAnchorDate = c => c.reconciledThrough || c.dueDate || "0000-00-00";
+
+  // Purchases/refunds/recurring charged to the card since the last reconcile — a quick "you've spent
+  // more since your last statement" signal. planned_spend is explicitly a maybe ("optional - can
+  // cancel"), so it's excluded until it becomes real; card_payment is handled separately below.
   function cardNewActivity(db, c) {
     let delta = 0;
     const anchor = cardAnchorDate(c);
@@ -528,8 +533,30 @@ const STS = (() => {
     }
     return r2(delta);
   }
-  const cardOwedNow = (db, c) => r2((+c.statementBalance || 0) + cardNewActivity(db, c));
-  const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - (+c.funded || 0))) : 0;
+
+  // Owed now = the last confirmed snapshot, rolled forward: new charges/refunds since then, plus any
+  // payment that has actually posted (Cleared). A still-Pending payment hasn't happened yet, so it
+  // doesn't reduce the balance until it clears — it shows up as "funded" instead (below).
+  function cardOwedNow(db, c) {
+    const anchor = cardAnchorDate(c);
+    let owed = +c.balance || 0;
+    for (const e of db.ledger) {
+      if (!notVoid(e) || e.cardName !== c.name || e.date <= anchor) continue;
+      if (e.type === "planned_spend") continue;
+      if (e.type === "card_payment") { if (e.status === "Cleared") owed += e.amount; }
+      else owed += -e.amount;
+    }
+    return r2(owed);
+  }
+
+  // Funded = cash already scheduled to pay this card down — the one pending statement-payment
+  // transfer that Reconcile keeps in the ledger. Unfunded is whatever's owed beyond that: real spend
+  // (or a minimum-only autopay) with no scheduled payment behind it yet.
+  function cardFunded(db, c) {
+    const pend = db.ledger.find(e => notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending");
+    return pend ? r2(Math.abs(pend.amount)) : 0;
+  }
+  const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - cardFunded(db, c))) : 0;
   const totalUnfunded = db => r2(db.cards.reduce((s, c) => s + cardUnfunded(db, c), 0));
 
   function windowFlows(db, asOfD, payday) {
@@ -795,7 +822,7 @@ const STS = (() => {
   return {
     r2, todayStr, toDate, toStr, addDays, daysBetween, addMonthsAnchored,
     asOf, effectiveNextPayday, spendableChecking, savingsBackup,
-    cardAnchorDate, cardNewActivity, cardOwedNow, cardUnfunded, totalUnfunded,
+    cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardUnfunded, totalUnfunded,
     windowFlows, safeToSpend, projection,
     missingRecurring, instanceEvent, occurrences,
     parseCSV, parseDateLoose, parseAmountLoose, normalizeCsv, classifyImport,
@@ -1065,32 +1092,24 @@ function openEditEvent(id) {
 // ---------------- cards tab ----------------
 function renderCards() {
   $("cardsBody").innerHTML = DB.cards.map((c, i) => {
+    const owed = STS.cardOwedNow(DB, c);
+    const funded = STS.cardFunded(DB, c);
     const unf = STS.cardUnfunded(DB, c);
     const newActivity = STS.cardNewActivity(DB, c);
     const auto = c.autopayMode + (c.autopayMode !== "Full" && c.autopayAmount ? " " + fmt$(c.autopayAmount) : "");
     return `<tr>
       <td>${esc(c.name)}${c.treatAs === "Debt" ? ' <span class="chip dim">debt</span>' : ""}</td>
-      <td class="num"><input type="number" step="0.01" value="${c.balance}" style="width:100px;text-align:right" onchange="setCardBalance(${i}, this.value)"></td>
+      <td class="num">${fmt$(owed)}</td>
       <td class="num">${newActivity ? `<span class="chip warn">+${fmt$(newActivity)}</span>` : "—"}</td>
       <td class="num">${fmt$(c.statementBalance)}</td>
       <td>${c.dueDate ? fmtDate(c.dueDate) : ""}</td>
       <td>${esc(auto)}</td>
-      <td class="num"><input type="number" step="0.01" value="${c.funded}" style="width:100px;text-align:right" onchange="setCardFunded(${i}, this.value)"></td>
+      <td class="num">${fmt$(funded)}</td>
       <td class="num">${unf > 0 ? `<span class="chip warn">${fmt$(unf)}</span>` : fmt$(0)}</td>
       <td style="white-space:nowrap"><button class="mini" onclick="openReconcile(${i})">Reconcile</button>
       <button class="mini danger" onclick="delCard(${i})">×</button></td>
     </tr>`;
   }).join("");
-}
-function setCardBalance(i, v) {
-  const n = parseFloat(v);
-  if (isNaN(n)) { render(); return; }
-  DB.cards[i].balance = STS.r2(n); save();
-}
-function setCardFunded(i, v) {
-  const n = parseFloat(v);
-  if (isNaN(n) || n < 0) { render(); return; }
-  DB.cards[i].funded = STS.r2(n); save();
 }
 function delCard(i) {
   const c = DB.cards[i];
@@ -1099,32 +1118,37 @@ function delCard(i) {
 function openReconcile(i) {
   const isNew = i < 0;
   const c = isNew
-    ? { name: "", balance: 0, statementBalance: 0, dueDate: STS.asOf(DB), autopayMode: "Full", autopayAmount: null, funded: 0, activeForSpend: true, treatAs: "Card", payFrom: (spendableAccounts()[0] || {}).name || "" }
+    ? { name: "", balance: 0, statementBalance: 0, dueDate: STS.asOf(DB), autopayMode: "Full", autopayAmount: null, activeForSpend: true, treatAs: "Card", payFrom: (spendableAccounts()[0] || {}).name || "" }
     : DB.cards[i];
   const acctOpts = spendableAccounts().map(a => `<option ${a.name === c.payFrom ? "selected" : ""}>${esc(a.name)}</option>`).join("");
   const liveOwed = isNew ? 0 : STS.cardOwedNow(DB, c);
+  const liveFunded = isNew ? 0 : STS.cardFunded(DB, c);
   const newActivity = isNew ? 0 : STS.cardNewActivity(DB, c);
   openDlg(`
     <h3>${isNew ? "Add card" : "Reconcile " + esc(c.name) + " to its statement"}</h3>
     ${isNew ? `<div class="frow"><div class="f"><span>Card name</span><input id="rcName" size="24"></div></div>` : ""}
-    ${newActivity ? `<p class="hint" style="margin-top:0">${fmt$(newActivity)} in new purchases/refunds have posted since the last reconcile — folded into the statement balance below. Adjust it to match the real paper statement if it differs.</p>` : ""}
+    ${isNew
+      ? `<p class="hint" style="margin-top:0">Enter what this card currently owes — that becomes its starting balance.
+         Every purchase, refund, and payment you log from here on is tracked automatically on top of it.</p>`
+      : `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveOwed)}</b> owed${newActivity ? ` (includes ${fmt$(newActivity)} in new purchases/refunds since your last reconcile)` : ""},
+         <b>${fmt$(liveFunded)}</b> already scheduled to be paid. Check this against your real statement and adjust below if it's different —
+         saving resets the starting point so the running balance starts fresh from here.</p>`
+    }
     <div class="frow">
-      <div class="f"><span>Statement balance</span><input type="number" step="0.01" id="rcStmt" value="${liveOwed}" style="width:120px"></div>
+      <div class="f"><span>${isNew ? "Starting balance" : "Statement balance"}</span><input type="number" step="0.01" id="rcStmt" value="${liveOwed}" style="width:120px"></div>
       <div class="f"><span>Due date</span><input type="date" id="rcDue" value="${esc(c.dueDate || "")}"></div>
-      <div class="f"><span>Current balance (owed now)</span><input type="number" step="0.01" id="rcBal" value="${c.balance}" style="width:120px"></div>
+      <div class="f"><span>Pay from</span><select id="rcFrom">${acctOpts}</select></div>
     </div>
     <div class="frow">
       <div class="f"><span>Autopay</span><select id="rcMode"><option ${c.autopayMode === "Full" ? "selected" : ""}>Full</option><option ${c.autopayMode === "Min" ? "selected" : ""}>Min</option><option ${c.autopayMode === "Custom" ? "selected" : ""}>Custom</option></select></div>
       <div class="f"><span>Payment amount</span><input type="number" step="0.01" id="rcPay" style="width:120px"></div>
-      <div class="f"><span>Funded (cash set aside)</span><input type="number" step="0.01" id="rcFunded" value="${c.funded}" style="width:120px"></div>
-      <div class="f"><span>Pay from</span><select id="rcFrom">${acctOpts}</select></div>
     </div>
     <div class="frow">
       <div class="f"><span>Treat as</span><select id="rcTreat"><option ${c.treatAs === "Card" ? "selected" : ""}>Card</option><option ${c.treatAs === "Debt" ? "selected" : ""}>Debt</option></select></div>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="rcActive" ${c.activeForSpend !== false ? "checked" : ""}> active for new spending</label>
     </div>
-    <p class="hint" style="margin:4px 0 0">Saving updates the card and schedules (or refreshes) its pending statement-payment
-    transfer in the ledger — cash leaves checking on the due date, and the purchases are never counted twice.</p>
+    <p class="hint" style="margin:4px 0 0">Saving schedules (or refreshes) this card's pending statement-payment transfer —
+    that scheduled amount becomes "Funded" on the Cards tab automatically; whatever's left over shows as Unfunded.</p>
     <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="rcSave">${isNew ? "Add card" : "Save & schedule payment"}</button></div>
   `);
   const payBox = $("rcPay");
@@ -1147,12 +1171,11 @@ function openReconcile(i) {
       c.name = name; DB.cards.push(c);
     }
     c.statementBalance = STS.r2(stmt);
-    c.balance = STS.r2(parseFloat($("rcBal").value) || 0);
+    c.balance = STS.r2(stmt);
     c.dueDate = due;
     c.reconciledThrough = STS.asOf(DB);
     c.autopayMode = $("rcMode").value;
     c.autopayAmount = c.autopayMode === "Full" ? null : STS.r2(pay);
-    c.funded = STS.r2(parseFloat($("rcFunded").value) || 0);
     c.payFrom = $("rcFrom").value;
     c.treatAs = $("rcTreat").value;
     c.activeForSpend = $("rcActive").checked;
