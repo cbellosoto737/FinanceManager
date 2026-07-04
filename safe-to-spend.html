@@ -215,6 +215,11 @@
       before the next payday (+ anything scheduled to arrive before then). Moderate adds the next paycheck;
       Aggressive adds savings backup. A card purchase only moves this headline number once it's actually
       scheduled to leave checking — reconcile the card (or wait for its statement payment) to fold it in.</p>
+      <p><b>Net after card debt</b> answers a different question: "what's left if every card's unfunded spend
+      had to be covered today, not just what's already scheduled?" It's the headline number minus the total
+      Unfunded card obligation — so a purchase you haven't reconciled into a statement payment yet still shows
+      up here immediately, instead of staying invisible until autopay eventually turns it into one big scheduled
+      hit. It moves with Conservative/Moderate/Aggressive exactly like the headline does.</p>
       <p>A <b>Pending</b> item that's still sitting there weeks after its date is usually forgotten cruft (an
       autopay that actually posted, or leftover sample data) — it keeps counting against you forever until you
       clear or delete it, so the app flags anything over two weeks stale.</p>
@@ -877,16 +882,25 @@ const STS = (() => {
     const ctx = { spendable, savings, flows };
     const mode = modeOverride || db.settings.mode;
     const proj = projection(db, asOfD, db.settings.horizonDays, db.settings.reserve);
+    const sts = safeToSpend(db, mode, ctx);
+    const unfunded = totalUnfunded(db);
     return {
       asOfD, payday, spendable, savings, flows,
-      sts: safeToSpend(db, mode, ctx),
+      sts,
       stsByMode: {
         Conservative: safeToSpend(db, "Conservative", ctx),
         Moderate: safeToSpend(db, "Moderate", ctx),
         Aggressive: safeToSpend(db, "Aggressive", ctx)
       },
-      unfunded: totalUnfunded(db),
+      unfunded,
       unfundedCards: db.cards.filter(c => cardUnfunded(db, c) > 0).length,
+      // Safe to Spend already subtracts every card PAYMENT scheduled before payday, but a card
+      // purchase that hasn't reached a statement yet has no scheduled payment at all -- it's real
+      // spend, just invisible until autopay eventually turns it into a scheduled outflow (at which
+      // point it hits the headline all at once). This nets it out proactively instead: what's left
+      // if every card's unfunded balance had to be covered right now, on top of everything already
+      // scheduled. It moves with the mode toggle exactly like the headline number does.
+      netAfterCardDebt: r2(sts - unfunded),
       proj,
       reserveBreach: proj.low < db.settings.reserve,
       goesNegative: proj.low < 0,
@@ -979,6 +993,7 @@ function render() {
     tile("Next payday", fmtDate(C.payday), "in " + days + " day" + (days === 1 ? "" : "s") + " · " + fmt$(DB.settings.netPerPaycheck) + " net", ""),
     tile("Leaving checking before payday", fmt$(C.flows.outflow), "arriving: " + fmt$(C.flows.inflow), ""),
     tile("Unfunded card obligation", fmt$(C.unfunded), C.unfundedCards ? "across " + C.unfundedCards + " card" + (C.unfundedCards === 1 ? "" : "s") : "all statements funded", C.unfunded > 0 ? "warn" : "good"),
+    tile("Net after card debt", fmt$(C.netAfterCardDebt), C.unfunded > 0 ? "if every card's unfunded spend hit today" : "same as headline — no unfunded spend", C.netAfterCardDebt < 0 ? "bad" : C.netAfterCardDebt < C.sts ? "warn" : "good"),
     tile("Cash reserve", fmt$(DB.settings.reserve), C.reserveBreach ? "projected to be breached" : "holding", C.reserveBreach ? "warn" : "good"),
     tile("Savings backup", fmt$(C.savings), mode === "Aggressive" ? "counted (Aggressive)" : "not counted", "")
   ].join("");

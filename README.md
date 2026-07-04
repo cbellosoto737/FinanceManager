@@ -46,6 +46,11 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   depositing it every payday, the same low-maintenance way expenses work, instead of a manual
   "Add something → Money in" entry every pay period. One-off income (a bonus, a refund) still goes
   through quick-add on the Ledger tab.
+- **Net after card debt** (a dashboard tile) is the headline number minus the total Unfunded card
+  obligation — "what's left if every card's un-autopaid spend hit today, not just what's already
+  scheduled." A card purchase raises this the moment you log it, even before it's ever been folded
+  into a statement payment, so it's never a surprise later when autopay finally schedules it. It
+  moves with the Conservative/Moderate/Aggressive toggle exactly like the headline does.
 
 ## The two clocks: "what's real right now" vs. "what's still coming"
 
