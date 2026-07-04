@@ -1,7 +1,8 @@
 # FinanceManager — Safe to Spend
 
 One question, one number: **"Can we spend this money right now without causing a checking
-shortfall before the next paycheck or before upcoming bills hit?"**
+shortfall before the next paycheck, before upcoming bills hit, or once every card gets paid
+off?"**
 
 Everything is in a single file: **[`safe-to-spend.html`](safe-to-spend.html)**.
 Double-click it (or open it in any browser) — no install, no server, no account, works offline.
@@ -13,9 +14,13 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   **unfunded** total on the Cards tab — but no cash leaves checking yet.
 - The later **card payment** is a **transfer** of cash from checking to the card. It is never a
   second expense.
-- Only rows that actually move cash drive the checking projection and the headline number — a
-  new purchase only moves the headline **Safe to Spend** once it's actually scheduled to leave
-  checking (Reconcile the card, or its statement due date falls before your next payday).
+- The checking projection only reacts to rows that actually move cash — a new card purchase never
+  double-counts there. But **Safe to Spend itself is a different, broader number**: it's the
+  checking-based figure minus the **total unfunded card obligation**, so a card purchase lowers the
+  headline the instant you log it, whether or not it's been folded into a scheduled statement
+  payment yet. Reconciling a card only ever holds the headline steady or *improves* it (if the real
+  due date turns out to land after your next payday) — it can never cause a surprise drop, because
+  the debt was already subtracted the moment it happened.
 - Each card's **balance** and **funded** are always *calculated*, never typed in directly. Balance
   starts from whatever you last confirmed in **Reconcile**, as of the **"Balance as of"** date you
   set there, and rolls forward with every purchase, refund, and posted payment dated after that;
@@ -46,11 +51,10 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   depositing it every payday, the same low-maintenance way expenses work, instead of a manual
   "Add something → Money in" entry every pay period. One-off income (a bonus, a refund) still goes
   through quick-add on the Ledger tab.
-- **Net after card debt** (a dashboard tile) is the headline number minus the total Unfunded card
-  obligation — "what's left if every card's un-autopaid spend hit today, not just what's already
-  scheduled." A card purchase raises this the moment you log it, even before it's ever been folded
-  into a statement payment, so it's never a surprise later when autopay finally schedules it. It
-  moves with the Conservative/Moderate/Aggressive toggle exactly like the headline does.
+- The **Unfunded card obligation** tile shows that total explicitly — "what's left if every card's
+  un-autopaid spend hit today, not just what's already scheduled" — and its subtext makes clear
+  it's already baked into the headline above, not a second, competing number to reconcile in your
+  head.
 
 ## The two clocks: "what's real right now" vs. "what's still coming"
 
@@ -67,7 +71,8 @@ nothing needs to be re-entered, and nothing is ever counted in both places at on
 ## First run
 
 The app loads sample seed data (from `SafeToSpend_Model.xlsx`) with a fixed "today" of
-2024-07-12 so you can see it working: Safe to Spend = **$1,208.16** (Conservative), projected
+2024-07-12 so you can see it working: Safe to Spend = **$1,156.40** (Conservative — the checking
+math alone gives $1,208.16, minus OneKey Expedia's $51.76 of unfunded card debt), projected
 low **−$1,296.19 on Aug 5**.
 
 ## Loading your real data

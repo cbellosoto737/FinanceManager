@@ -207,19 +207,17 @@
     <summary>How this works (the one rule)</summary>
     <div>
       <p>A <b>card purchase</b> is the real spending event — the moment you log it, it raises that card's
-      "Unfunded" amount on the Cards tab (money you now owe but haven't set cash aside for), but no cash leaves
-      checking yet. The later <b>card payment</b> is just a transfer of cash from checking to the card — never a
-      second expense. Only rows that actually move cash in or out of checking drive the projection and the
-      headline number, so nothing is ever counted twice.</p>
+      "Unfunded" amount on the Cards tab (money you now owe but haven't set cash aside for), and it's
+      immediately subtracted from Safe to Spend below — no cash leaves checking yet, but the debt is real, so
+      it counts right away rather than staying invisible until a statement payment eventually gets scheduled.
+      The later <b>card payment</b> is just a transfer of cash from checking to the card — never a second
+      expense. Reconciling moves that same amount from "unfunded" into "scheduled outflow" (or, if the due date
+      falls after your next payday, off the near-term radar entirely) — either way, the headline can only hold
+      steady or improve once the real due date is known, never drop as a surprise later.</p>
       <p><b>Safe to spend</b> = spendable checking − your cash reserve − everything scheduled to leave checking
-      before the next payday (+ anything scheduled to arrive before then). Moderate adds the next paycheck;
-      Aggressive adds savings backup. A card purchase only moves this headline number once it's actually
-      scheduled to leave checking — reconcile the card (or wait for its statement payment) to fold it in.</p>
-      <p><b>Net after card debt</b> answers a different question: "what's left if every card's unfunded spend
-      had to be covered today, not just what's already scheduled?" It's the headline number minus the total
-      Unfunded card obligation — so a purchase you haven't reconciled into a statement payment yet still shows
-      up here immediately, instead of staying invisible until autopay eventually turns it into one big scheduled
-      hit. It moves with Conservative/Moderate/Aggressive exactly like the headline does.</p>
+      before the next payday (+ anything scheduled to arrive before then) − every card's unfunded balance.
+      Moderate adds the next paycheck; Aggressive adds savings backup. Only rows that actually move cash, plus
+      unfunded card debt, ever touch this number — nothing is ever counted twice.</p>
       <p>A <b>Pending</b> item that's still sitting there weeks after its date is usually forgotten cruft (an
       autopay that actually posted, or leftover sample data) — it keeps counting against you forever until you
       clear or delete it, so the app flags anything over two weeks stale.</p>
@@ -568,6 +566,13 @@ const STS = (() => {
   // saved before this field existed, since that's the closest anchor already on hand.
   const cardAnchorDate = c => c.reconciledThrough || c.dueDate || "0000-00-00";
 
+  // A purchase/recurring charge counts as real spend once it's Cleared, OR once its date has
+  // actually arrived (most card charges post same-day, so a Pending one dated today or earlier is
+  // as good as real -- "Generate upcoming bills" pre-creates Pending instances for bills weeks out
+  // precisely so you don't forget them, and those must NOT count as owed/unfunded before they
+  // actually happen, or the headline would crater the moment you generate next month's bills).
+  const cardChargeIsReal = (e, asOfD) => e.status === "Cleared" || e.date <= asOfD;
+
   // Purchases/refunds/recurring charged to the card since the last reconcile — a quick "you've spent
   // more since your last statement" signal. planned_spend is explicitly a maybe ("optional - can
   // cancel"), so it's excluded until it becomes real; card_payment is handled separately below. The
@@ -576,8 +581,9 @@ const STS = (() => {
   function cardNewActivity(db, c) {
     let delta = 0;
     const anchor = cardAnchorDate(c);
+    const asOfD = asOf(db);
     for (const e of db.ledger) {
-      if (notVoid(e) && e.cardName === c.name && e.type !== "card_payment" && e.type !== "planned_spend" && e.date >= anchor) delta += -e.amount;
+      if (notVoid(e) && e.cardName === c.name && e.type !== "card_payment" && e.type !== "planned_spend" && e.date >= anchor && cardChargeIsReal(e, asOfD)) delta += -e.amount;
     }
     return r2(delta);
   }
@@ -587,12 +593,22 @@ const STS = (() => {
   // doesn't reduce the balance until it clears — it shows up as "funded" instead (below).
   function cardOwedNow(db, c) {
     const anchor = cardAnchorDate(c);
+    const asOfD = asOf(db);
     let owed = +c.balance || 0;
     for (const e of db.ledger) {
       if (!notVoid(e) || e.cardName !== c.name || e.date < anchor) continue;
       if (e.type === "planned_spend") continue;
-      if (e.type === "card_payment") { if (e.status === "Cleared") owed += e.amount; }
-      else owed += -e.amount;
+      if (e.type === "card_payment") {
+        // A real cash transfer needs explicit confirmation -- bank processing can lag its due date,
+        // so only a Cleared one counts. A debt paydown-via-card (cashImpact false) has no processing
+        // lag of its own -- it's a bookkeeping mirror of its paired charge -- so it follows the same
+        // "date has arrived, or Cleared" rule as any other charge, keeping both sides of the pair
+        // consistent (see instanceEvents/debtPaydownEvent).
+        if (e.cashImpact ? e.status === "Cleared" : cardChargeIsReal(e, asOfD)) owed += e.amount;
+        continue;
+      }
+      if (!cardChargeIsReal(e, asOfD)) continue;
+      owed += -e.amount;
     }
     return r2(owed);
   }
@@ -601,7 +617,7 @@ const STS = (() => {
   // transfer that Reconcile keeps in the ledger. Unfunded is whatever's owed beyond that: real spend
   // (or a minimum-only autopay) with no scheduled payment behind it yet.
   function cardFunded(db, c) {
-    const pend = db.ledger.find(e => notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending");
+    const pend = db.ledger.find(e => notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending" && e.cashImpact);
     return pend ? r2(Math.abs(pend.amount)) : 0;
   }
   const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - cardFunded(db, c))) : 0;
@@ -631,8 +647,14 @@ const STS = (() => {
       .reduce((s, e) => s + e.amount, 0));
   }
 
+  // Unfunded card debt is real, already-happened spending with no scheduled payment yet -- it isn't
+  // a maybe, it's just not dated yet. Subtracting it here (rather than only once a statement payment
+  // eventually gets scheduled) means the number never overstates what's truly available, and it can
+  // only ever hold steady or improve once you reconcile and learn the real due date -- never drop
+  // as a surprise later. Applies to every mode: Moderate/Aggressive only change what *additional*
+  // resources count as available, not whether existing debt gets subtracted.
   function safeToSpend(db, mode, ctx) {
-    let v = ctx.spendable - db.settings.reserve + ctx.flows.inflow + ctx.flows.outflow;
+    let v = ctx.spendable - db.settings.reserve + ctx.flows.inflow + ctx.flows.outflow - ctx.unfunded;
     if (mode === "Moderate" || mode === "Aggressive") v += db.settings.netPerPaycheck;
     if (mode === "Aggressive") v += ctx.savings;
     return r2(v);
@@ -715,16 +737,17 @@ const STS = (() => {
   // A debt paid via a credit card is a transfer between two card-like balances, not a cash
   // transaction: charging payMethod raises what it owes (the instanceEvent above), and this paired
   // event simultaneously lowers the debt by the same amount. cashImpact stays false (no cash left
-  // checking) and status is Cleared immediately (the paydown happens the moment the charge posts) --
-  // that combination makes it invisible to the checking projection and to "Funded" (which only looks
-  // for a Pending payment), while still counting toward the debt's Balance via the same rule an
-  // ordinary posted card payment already follows.
+  // checking), which makes it invisible to the checking projection and to "Funded" (which only looks
+  // for a Pending CASH payment). Status starts Pending, matching its charge sibling -- a future-dated
+  // debt-paydown bill (e.g. next month's) shouldn't count as real spend before its date arrives, any
+  // more than a plain recurring bill would (see cardChargeIsReal / cardOwedNow's card_payment branch,
+  // which treats a non-cash card_payment by that same "date arrived, or Cleared" rule).
   function debtPaydownEvent(t, date) {
     if (!t.payDownDebt) return null;
     return {
       date, type: "card_payment", description: t.name, category: t.category,
       amount: r2(-Math.abs(t.amount)), source: "", dest: t.payDownDebt, payMethod: "Card",
-      cardName: t.payDownDebt, cashImpact: false, mandatory: !!t.mandatory, status: "Cleared",
+      cardName: t.payDownDebt, cashImpact: false, mandatory: !!t.mandatory, status: "Pending",
       inSTS: false, recurringId: t.id, notes: "Paid via " + t.payMethod
     };
   }
@@ -879,14 +902,13 @@ const STS = (() => {
     const spendable = spendableChecking(db);
     const savings = savingsBackup(db);
     const flows = windowFlows(db, asOfD, payday);
-    const ctx = { spendable, savings, flows };
+    const unfunded = totalUnfunded(db);
+    const ctx = { spendable, savings, flows, unfunded };
     const mode = modeOverride || db.settings.mode;
     const proj = projection(db, asOfD, db.settings.horizonDays, db.settings.reserve);
-    const sts = safeToSpend(db, mode, ctx);
-    const unfunded = totalUnfunded(db);
     return {
       asOfD, payday, spendable, savings, flows,
-      sts,
+      sts: safeToSpend(db, mode, ctx),
       stsByMode: {
         Conservative: safeToSpend(db, "Conservative", ctx),
         Moderate: safeToSpend(db, "Moderate", ctx),
@@ -894,13 +916,6 @@ const STS = (() => {
       },
       unfunded,
       unfundedCards: db.cards.filter(c => cardUnfunded(db, c) > 0).length,
-      // Safe to Spend already subtracts every card PAYMENT scheduled before payday, but a card
-      // purchase that hasn't reached a statement yet has no scheduled payment at all -- it's real
-      // spend, just invisible until autopay eventually turns it into a scheduled outflow (at which
-      // point it hits the headline all at once). This nets it out proactively instead: what's left
-      // if every card's unfunded balance had to be covered right now, on top of everything already
-      // scheduled. It moves with the mode toggle exactly like the headline number does.
-      netAfterCardDebt: r2(sts - unfunded),
       proj,
       reserveBreach: proj.low < db.settings.reserve,
       goesNegative: proj.low < 0,
@@ -962,7 +977,7 @@ function render() {
   const heroState = C.sts <= 0 ? "bad" : C.reserveBreach ? "warn" : "good";
   v.className = "value " + heroState;
   const modeBits = {
-    Conservative: "checking − reserve − everything scheduled before payday",
+    Conservative: "checking − reserve − scheduled before payday − unfunded card debt",
     Moderate: "conservative + your next paycheck",
     Aggressive: "moderate + savings backup"
   };
@@ -992,8 +1007,7 @@ function render() {
     tile("Projected low (" + DB.settings.horizonDays + "d)", fmt$(C.proj.low), fmtDateLong(C.proj.lowDate), lowCls),
     tile("Next payday", fmtDate(C.payday), "in " + days + " day" + (days === 1 ? "" : "s") + " · " + fmt$(DB.settings.netPerPaycheck) + " net", ""),
     tile("Leaving checking before payday", fmt$(C.flows.outflow), "arriving: " + fmt$(C.flows.inflow), ""),
-    tile("Unfunded card obligation", fmt$(C.unfunded), C.unfundedCards ? "across " + C.unfundedCards + " card" + (C.unfundedCards === 1 ? "" : "s") : "all statements funded", C.unfunded > 0 ? "warn" : "good"),
-    tile("Net after card debt", fmt$(C.netAfterCardDebt), C.unfunded > 0 ? "if every card's unfunded spend hit today" : "same as headline — no unfunded spend", C.netAfterCardDebt < 0 ? "bad" : C.netAfterCardDebt < C.sts ? "warn" : "good"),
+    tile("Unfunded card obligation", fmt$(C.unfunded), C.unfundedCards ? "already subtracted above, across " + C.unfundedCards + " card" + (C.unfundedCards === 1 ? "" : "s") : "all statements funded", C.unfunded > 0 ? "warn" : "good"),
     tile("Cash reserve", fmt$(DB.settings.reserve), C.reserveBreach ? "projected to be breached" : "holding", C.reserveBreach ? "warn" : "good"),
     tile("Savings backup", fmt$(C.savings), mode === "Aggressive" ? "counted (Aggressive)" : "not counted", "")
   ].join("");
