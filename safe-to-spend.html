@@ -107,6 +107,9 @@
   .runway-scroll { max-height: 340px; overflow: auto; border: 1px solid var(--hairline); border-radius: 10px; margin-top: 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 7px 10px; border-bottom: 1px solid var(--hairline); position: sticky; top: 0; background: var(--surface); }
+  th[data-sort] { cursor: pointer; user-select: none; }
+  th[data-sort]:hover { color: var(--ink2); }
+  .sort-arrow { display: inline-block; font-size: 10px; min-width: 8px; }
   td { padding: 6px 10px; border-bottom: 1px solid var(--hairline); vertical-align: middle; }
   tr:last-child td { border-bottom: 0; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -264,19 +267,48 @@
     </div>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Date</th><th>Description</th><th class="num">Amount</th><th>Where</th><th>Cash?</th><th>Status</th><th></th></tr></thead>
+        <thead id="ledgerHead"><tr>
+          <th data-sort="date">Date<span class="sort-arrow" data-key="date"></span></th>
+          <th data-sort="description">Description<span class="sort-arrow" data-key="description"></span></th>
+          <th class="num" data-sort="amount">Amount<span class="sort-arrow" data-key="amount"></span></th>
+          <th data-sort="where">Where<span class="sort-arrow" data-key="where"></span></th>
+          <th data-sort="cash">Cash?<span class="sort-arrow" data-key="cash"></span></th>
+          <th data-sort="status">Status<span class="sort-arrow" data-key="status"></span></th>
+          <th></th>
+        </tr></thead>
         <tbody id="ledgerBody"></tbody>
       </table>
     </div>
     <p class="hint">“Cash? yes” rows are the only ones that move checking. Card purchases sit on the card until
-    its statement payment. Click a status to flip Pending ↔ Cleared.</p>
+    its statement payment. Click a status to flip Pending ↔ Cleared. Click a column header to sort by it —
+    click again to reverse.</p>
   </section>
 
   <section class="panel card" id="panel-cards">
     <h2>Credit cards</h2>
+    <div class="frow">
+      <div class="f"><span>Show</span>
+        <select id="cardsFilter">
+          <option value="all">All cards</option>
+          <option value="card">Cards only (excludes debts)</option>
+          <option value="debt">Debts only</option>
+          <option value="unfunded">Unfunded only</option>
+          <option value="active">Active for spend only</option>
+        </select></div>
+    </div>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Card</th><th class="num">Balance</th><th class="num">New since reconcile</th><th class="num">Statement</th><th>Due</th><th>Autopay</th><th class="num">Funded</th><th class="num">Unfunded</th><th></th></tr></thead>
+        <thead id="cardsHead"><tr>
+          <th data-sort="name">Card<span class="sort-arrow" data-key="name"></span></th>
+          <th class="num" data-sort="owed">Balance<span class="sort-arrow" data-key="owed"></span></th>
+          <th class="num" data-sort="newActivity">New since reconcile<span class="sort-arrow" data-key="newActivity"></span></th>
+          <th class="num" data-sort="statement">Statement<span class="sort-arrow" data-key="statement"></span></th>
+          <th data-sort="due">Due<span class="sort-arrow" data-key="due"></span></th>
+          <th data-sort="autopay">Autopay<span class="sort-arrow" data-key="autopay"></span></th>
+          <th class="num" data-sort="funded">Funded<span class="sort-arrow" data-key="funded"></span></th>
+          <th class="num" data-sort="unfunded">Unfunded<span class="sort-arrow" data-key="unfunded"></span></th>
+          <th></th>
+        </tr></thead>
         <tbody id="cardsBody"></tbody>
       </table>
     </div>
@@ -295,9 +327,27 @@
 
   <section class="panel card" id="panel-accounts">
     <h2>Accounts</h2>
+    <div class="frow">
+      <div class="f"><span>Show</span>
+        <select id="accountsFilter">
+          <option value="all">All accounts</option>
+          <option value="Checking">Checking</option>
+          <option value="Savings">Savings</option>
+          <option value="Investment">Investment</option>
+          <option value="spendable">Spendable only</option>
+        </select></div>
+    </div>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Account</th><th>Type</th><th>Institution</th><th class="num">Balance</th><th class="num">New since reconcile</th><th>Spendable?</th><th></th></tr></thead>
+        <thead id="accountsHead"><tr>
+          <th data-sort="name">Account<span class="sort-arrow" data-key="name"></span></th>
+          <th data-sort="type">Type<span class="sort-arrow" data-key="type"></span></th>
+          <th data-sort="institution">Institution<span class="sort-arrow" data-key="institution"></span></th>
+          <th class="num" data-sort="balance">Balance<span class="sort-arrow" data-key="balance"></span></th>
+          <th class="num" data-sort="newActivity">New since reconcile<span class="sort-arrow" data-key="newActivity"></span></th>
+          <th data-sort="spendable">Spendable?<span class="sort-arrow" data-key="spendable"></span></th>
+          <th></th>
+        </tr></thead>
         <tbody id="accountsBody"></tbody>
       </table>
     </div>
@@ -317,9 +367,28 @@
       <button class="primary" id="genRecurringBtn">Generate upcoming bills</button>
       <button class="ghost" id="addRecurringBtn">+ Add recurring bill</button>
     </div>
+    <div class="frow">
+      <div class="f"><span>Show</span>
+        <select id="recurringFilter">
+          <option value="all">All</option>
+          <option value="expense">Expenses only</option>
+          <option value="income">Income only</option>
+          <option value="mandatory">Mandatory only</option>
+          <option value="card">Card-charged only</option>
+        </select></div>
+    </div>
     <div class="scroll-x">
       <table>
-        <thead><tr><th>Name</th><th>Category</th><th class="num">Amount</th><th>Frequency</th><th>Next date</th><th>Paid with</th><th>Mandatory</th><th></th></tr></thead>
+        <thead id="recurringHead"><tr>
+          <th data-sort="name">Name<span class="sort-arrow" data-key="name"></span></th>
+          <th data-sort="category">Category<span class="sort-arrow" data-key="category"></span></th>
+          <th class="num" data-sort="amount">Amount<span class="sort-arrow" data-key="amount"></span></th>
+          <th data-sort="frequency">Frequency<span class="sort-arrow" data-key="frequency"></span></th>
+          <th data-sort="nextDate">Next date<span class="sort-arrow" data-key="nextDate"></span></th>
+          <th data-sort="payMethod">Paid with<span class="sort-arrow" data-key="payMethod"></span></th>
+          <th data-sort="mandatory">Mandatory<span class="sort-arrow" data-key="mandatory"></span></th>
+          <th></th>
+        </tr></thead>
         <tbody id="recurringBody"></tbody>
       </table>
     </div>
@@ -499,11 +568,26 @@ const STS = (() => {
 
   const asOf = db => db.settings.asOfMode === "today" ? todayStr() : db.settings.asOfDate;
 
+  // Semimonthly (twice a month) has no single fixed interval, so it alternates purely off the day
+  // of month: a date on/before the 15th jumps to the 15th-days-later date in the SAME month (capped
+  // at that month's last day, e.g. the 1st -> the 16th); a date after the 15th jumps to
+  // day-minus-15 in the NEXT month (e.g. the 16th -> the 1st). That reproduces a clean twice-a-month
+  // cadence from a single seed date, with no extra "second day" field needed.
+  function semimonthlyNext(dateStr) {
+    const d = toDate(dateStr);
+    if (d.getDate() <= 15) {
+      const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      return toStr(new Date(d.getFullYear(), d.getMonth(), Math.min(d.getDate() + 15, lastDay), 12));
+    }
+    return toStr(new Date(d.getFullYear(), d.getMonth() + 1, d.getDate() - 15, 12));
+  }
   function nextOccurrence(dateStr, freq, anchorDay) {
     switch (freq) {
       case "Weekly": return addDays(dateStr, 7);
       case "Biweekly": return addDays(dateStr, 14);
+      case "Semimonthly": return semimonthlyNext(dateStr);
       case "Monthly": return addMonthsAnchored(dateStr, 1, anchorDay);
+      case "Semiannual": return addMonthsAnchored(dateStr, 6, anchorDay);
       case "Yearly": return addMonthsAnchored(dateStr, 12, anchorDay);
       default: return null;
     }
@@ -687,7 +771,7 @@ const STS = (() => {
   }
 
   // Recurring instances due within the horizon that have no ledger event yet.
-  const GEN_FREQS = ["Weekly", "Biweekly", "Monthly", "Yearly"];
+  const GEN_FREQS = ["Weekly", "Biweekly", "Semimonthly", "Monthly", "Semiannual", "Yearly"];
   function occurrences(t, fromD, toD) {
     if (!t.nextDate || !GEN_FREQS.includes(t.frequency)) return [];
     const anchorDay = toDate(t.nextDate).getDate();
@@ -700,7 +784,7 @@ const STS = (() => {
   }
   function missingRecurring(db, asOfD, horizon) {
     const end = addDays(asOfD, horizon);
-    const win = f => f === "Weekly" ? 3 : f === "Biweekly" ? 6 : 7;
+    const win = f => f === "Weekly" ? 3 : f === "Biweekly" ? 6 : f === "Semimonthly" ? 6 : 7;
     const out = [];
     for (const t of db.recurring) {
       for (const d of occurrences(t, asOfD, end)) {
@@ -964,6 +1048,38 @@ const isCardName = n => DB.cards.some(c => c.name === n);
 const spendableAccounts = () => DB.accounts.filter(a => a.spendable);
 const useId = () => { const id = DB.nextId || 1; DB.nextId = id + 1; return id; };
 
+// ---------------- table sort/filter (UI-only state, not persisted) ----------------
+const sortState = {
+  ledger: { key: "date", dir: 1 },
+  cards: { key: null, dir: 1 },
+  accounts: { key: null, dir: 1 },
+  recurring: { key: null, dir: 1 }
+};
+function applySort(rows, state, keyFns) {
+  const kf = state.key && keyFns[state.key];
+  if (!kf) return rows;
+  return rows.slice().sort((a, b) => {
+    const av = kf(a), bv = kf(b);
+    if (av < bv) return -state.dir;
+    if (av > bv) return state.dir;
+    return 0;
+  });
+}
+function renderSortArrows(theadEl, state) {
+  theadEl.querySelectorAll(".sort-arrow").forEach(el => {
+    el.textContent = el.dataset.key === state.key ? (state.dir === 1 ? " ▲" : " ▼") : "";
+  });
+}
+function bindSortHeaders(theadId, state, renderFn) {
+  $(theadId).addEventListener("click", e => {
+    const th = e.target.closest("th[data-sort]");
+    if (!th) return;
+    const key = th.dataset.sort;
+    if (state.key === key) state.dir *= -1; else { state.key = key; state.dir = 1; }
+    renderFn();
+  });
+}
+
 // ---------------- dashboard ----------------
 function render() {
   const C = STS.computeAll(DB);
@@ -1112,6 +1228,12 @@ function quickAdd() {
   $("qaDesc").value = ""; $("qaAmt").value = ""; $("qaCat").value = "";
   save();
 }
+const ledgerWhere = e => e.cardName ? e.cardName + (e.type === "card_payment" && e.cashImpact ? " ← " + (e.source || "") : "")
+  : (e.source || e.dest || "");
+const LEDGER_SORT_KEYS = {
+  date: e => e.date, description: e => e.description.toLowerCase(), amount: e => e.amount,
+  where: e => ledgerWhere(e).toLowerCase(), cash: e => e.cashImpact ? 1 : 0, status: e => e.status
+};
 function renderLedger() {
   const f = $("ledgerFilter").value;
   const asOfD = STS.asOf(DB);
@@ -1121,6 +1243,8 @@ function renderLedger() {
   else if (f === "cleared") rows = rows.filter(e => e.status === "Cleared");
   else if (f === "stale") rows = STS.stalePending(DB, asOfD);
   rows = rows.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id - b.id);
+  rows = applySort(rows, sortState.ledger, LEDGER_SORT_KEYS);
+  renderSortArrows($("ledgerHead"), sortState.ledger);
   $("ledgerBody").innerHTML = rows.map(e => {
     const where = e.cardName ? "💳 " + esc(e.cardName) + (e.type === "card_payment" && e.cashImpact ? " ← " + esc(e.source) : "")
       : esc(e.source || e.dest || "");
@@ -1224,14 +1348,28 @@ function openEditEvent(id) {
 }
 
 // ---------------- cards tab ----------------
+const CARDS_SORT_KEYS = {
+  name: r => r.c.name.toLowerCase(), owed: r => r.owed, newActivity: r => r.newActivity,
+  statement: r => r.c.statementBalance, due: r => r.c.dueDate || "", autopay: r => r.auto.toLowerCase(),
+  funded: r => r.funded, unfunded: r => r.unf
+};
 function renderCards() {
-  $("cardsBody").innerHTML = DB.cards.map((c, i) => {
-    const owed = STS.cardOwedNow(DB, c);
-    const funded = STS.cardFunded(DB, c);
-    const unf = STS.cardUnfunded(DB, c);
-    const newActivity = STS.cardNewActivity(DB, c);
-    const auto = c.autopayMode + (c.autopayMode !== "Full" && c.autopayAmount ? " " + fmt$(c.autopayAmount) : "");
-    return `<tr>
+  const f = $("cardsFilter").value;
+  let rows = DB.cards.map((c, i) => ({
+    c, i,
+    owed: STS.cardOwedNow(DB, c),
+    funded: STS.cardFunded(DB, c),
+    unf: STS.cardUnfunded(DB, c),
+    newActivity: STS.cardNewActivity(DB, c),
+    auto: c.autopayMode + (c.autopayMode !== "Full" && c.autopayAmount ? " " + fmt$(c.autopayAmount) : "")
+  }));
+  if (f === "card") rows = rows.filter(r => r.c.treatAs !== "Debt");
+  else if (f === "debt") rows = rows.filter(r => r.c.treatAs === "Debt");
+  else if (f === "unfunded") rows = rows.filter(r => r.unf > 0);
+  else if (f === "active") rows = rows.filter(r => r.c.activeForSpend !== false);
+  rows = applySort(rows, sortState.cards, CARDS_SORT_KEYS);
+  renderSortArrows($("cardsHead"), sortState.cards);
+  $("cardsBody").innerHTML = rows.map(({ c, i, owed, funded, unf, newActivity, auto }) => `<tr>
       <td>${esc(c.name)}${c.treatAs === "Debt" ? ' <span class="chip dim">debt</span>' : ""}</td>
       <td class="num">${fmt$(owed)}</td>
       <td class="num">${newActivity ? `<span class="chip warn">+${fmt$(newActivity)}</span>` : "—"}</td>
@@ -1242,8 +1380,7 @@ function renderCards() {
       <td class="num">${unf > 0 ? `<span class="chip warn">${fmt$(unf)}</span>` : fmt$(0)}</td>
       <td style="white-space:nowrap"><button class="mini" onclick="openReconcile(${i})">Reconcile</button>
       <button class="mini danger" onclick="delCard(${i})">×</button></td>
-    </tr>`;
-  }).join("");
+    </tr>`).join("") || '<tr><td colspan="9" style="color:var(--muted)">No cards match this filter.</td></tr>';
 }
 function delCard(i) {
   const c = DB.cards[i];
@@ -1333,19 +1470,25 @@ function openReconcile(i) {
 }
 
 // ---------------- accounts tab ----------------
+const ACCOUNTS_SORT_KEYS = {
+  name: r => r.a.name.toLowerCase(), type: r => r.a.type.toLowerCase(), institution: r => (r.a.institution || "").toLowerCase(),
+  balance: r => r.bal, newActivity: r => r.newActivity, spendable: r => r.a.spendable ? 1 : 0
+};
 function renderAccounts() {
-  $("accountsBody").innerHTML = DB.accounts.map((a, i) => {
-    const bal = STS.accountBalanceNow(DB, a);
-    const newActivity = STS.accountNewActivity(DB, a);
-    return `<tr>
+  const f = $("accountsFilter").value;
+  let rows = DB.accounts.map((a, i) => ({ a, i, bal: STS.accountBalanceNow(DB, a), newActivity: STS.accountNewActivity(DB, a) }));
+  if (f === "spendable") rows = rows.filter(r => r.a.spendable);
+  else if (f === "Checking" || f === "Savings" || f === "Investment") rows = rows.filter(r => r.a.type === f);
+  rows = applySort(rows, sortState.accounts, ACCOUNTS_SORT_KEYS);
+  renderSortArrows($("accountsHead"), sortState.accounts);
+  $("accountsBody").innerHTML = rows.map(({ a, i, bal, newActivity }) => `<tr>
     <td>${esc(a.name)}</td><td>${esc(a.type)}</td><td>${esc(a.institution || "")}</td>
     <td class="num">${fmt$(bal)}</td>
     <td class="num">${newActivity ? `<span class="chip ${newActivity > 0 ? "good" : "warn"}">${newActivity > 0 ? "+" : ""}${fmt$(newActivity)}</span>` : "—"}</td>
     <td>${a.spendable ? '<span class="chip good">yes</span>' : '<span class="chip dim">no</span>'}</td>
     <td style="white-space:nowrap"><button class="mini" onclick="openEditAccount(${i})">Edit</button>
     <button class="mini danger" onclick="delAccount(${i})">×</button></td>
-  </tr>`;
-  }).join("");
+  </tr>`).join("") || '<tr><td colspan="7" style="color:var(--muted)">No accounts match this filter.</td></tr>';
 }
 function delAccount(i) {
   const a = DB.accounts[i];
@@ -1396,8 +1539,21 @@ function openEditAccount(i) {
 }
 
 // ---------------- recurring tab ----------------
+const RECURRING_SORT_KEYS = {
+  name: r => r.t.name.toLowerCase(), category: r => (r.t.category || "").toLowerCase(), amount: r => r.t.amount,
+  frequency: r => r.t.frequency, nextDate: r => r.t.nextDate || "9999-99-99", payMethod: r => r.t.payMethod.toLowerCase(),
+  mandatory: r => r.t.mandatory ? 1 : 0
+};
 function renderRecurring() {
-  $("recurringBody").innerHTML = DB.recurring.map((t, i) => `<tr>
+  const f = $("recurringFilter").value;
+  let rows = DB.recurring.map((t, i) => ({ t, i }));
+  if (f === "expense") rows = rows.filter(r => r.t.kind !== "income");
+  else if (f === "income") rows = rows.filter(r => r.t.kind === "income");
+  else if (f === "mandatory") rows = rows.filter(r => r.t.mandatory);
+  else if (f === "card") rows = rows.filter(r => isCardName(r.t.payMethod));
+  rows = applySort(rows, sortState.recurring, RECURRING_SORT_KEYS);
+  renderSortArrows($("recurringHead"), sortState.recurring);
+  $("recurringBody").innerHTML = rows.map(({ t, i }) => `<tr>
     <td>${esc(t.name)}${t.kind === "income" ? ' <span class="chip good">income</span>' : ""}</td>
     <td>${esc(t.category)}</td>
     <td class="num ${t.kind === "income" ? "amt-pos" : ""}">${fmt$(t.amount)}</td><td>${esc(t.frequency)}</td>
@@ -1406,7 +1562,7 @@ function renderRecurring() {
     <td>${t.mandatory ? "yes" : ""}</td>
     <td style="white-space:nowrap"><button class="mini" onclick="openEditRecurring(${i})">edit</button>
     <button class="mini danger" onclick="delRecurring(${i})">×</button></td>
-  </tr>`).join("");
+  </tr>`).join("") || '<tr><td colspan="8" style="color:var(--muted)">No recurring items match this filter.</td></tr>';
 }
 function delRecurring(i) {
   const t = DB.recurring[i];
@@ -1424,7 +1580,7 @@ function openEditRecurring(i) {
       <div class="f"><span>Name</span><input id="rrName" value="${esc(t.name)}" size="20" placeholder="e.g. Paycheck"></div>
       <div class="f"><span>Kind</span><select id="rrKind"><option value="expense" ${t.kind !== "income" ? "selected" : ""}>Expense</option><option value="income" ${t.kind === "income" ? "selected" : ""}>Income</option></select></div>
       <div class="f"><span>Amount</span><input id="rrAmt" type="number" step="0.01" min="0" value="${t.amount}" style="width:100px"></div>
-      <div class="f"><span>Frequency</span><select id="rrFreq">${["Weekly", "Biweekly", "Monthly", "Yearly", "Monthly-est"].map(f => `<option ${f === t.frequency ? "selected" : ""}>${f}</option>`).join("")}</select></div>
+      <div class="f"><span>Frequency</span><select id="rrFreq">${["Weekly", "Biweekly", "Semimonthly", "Monthly", "Semiannual", "Yearly", "Monthly-est"].map(f => `<option ${f === t.frequency ? "selected" : ""}>${f}</option>`).join("")}</select></div>
       <div class="f"><span>Next date</span><input id="rrNext" type="date" value="${esc(t.nextDate || "")}"></div>
     </div>
     <div class="frow">
@@ -1658,6 +1814,13 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("qaAdd").addEventListener("click", quickAdd);
   $("ledgerFilter").addEventListener("change", renderLedger);
+  $("cardsFilter").addEventListener("change", renderCards);
+  $("accountsFilter").addEventListener("change", renderAccounts);
+  $("recurringFilter").addEventListener("change", renderRecurring);
+  bindSortHeaders("ledgerHead", sortState.ledger, renderLedger);
+  bindSortHeaders("cardsHead", sortState.cards, renderCards);
+  bindSortHeaders("accountsHead", sortState.accounts, renderAccounts);
+  bindSortHeaders("recurringHead", sortState.recurring, renderRecurring);
   $("addCardBtn").addEventListener("click", () => openReconcile(-1));
   $("addAcctBtn").addEventListener("click", () => openEditAccount(-1));
   $("addRecurringBtn").addEventListener("click", () => openEditRecurring(-1));

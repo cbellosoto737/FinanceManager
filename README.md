@@ -50,7 +50,13 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   once (amount, cadence, which checking account it lands in) and **Generate upcoming bills** keeps
   depositing it every payday, the same low-maintenance way expenses work, instead of a manual
   "Add something → Money in" entry every pay period. One-off income (a bonus, a refund) still goes
-  through quick-add on the Ledger tab.
+  through quick-add on the Ledger tab. Frequency options include **Semimonthly** (twice a month,
+  e.g. the 1st & 16th) and **Semiannual** (every 6 months) alongside Weekly/Biweekly/Monthly/Yearly.
+- Every table (**Ledger, Cards, Accounts, Recurring**) has a **Show** filter above it and clickable
+  column headers — click a header to sort by it, click again to reverse. Neither choice is saved
+  between page loads; they're just a quick way to look at what's already there from a different
+  angle (e.g. sort Cards by Unfunded to see what needs attention first, or filter Recurring to
+  Income only).
 - The **Unfunded card obligation** tile shows that total explicitly — "what's left if every card's
   un-autopaid spend hit today, not just what's already scheduled" — and its subtext makes clear
   it's already baked into the headline above, not a second, competing number to reconcile in your
