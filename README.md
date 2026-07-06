@@ -8,6 +8,12 @@ Everything is in a single file: **[`safe-to-spend.html`](safe-to-spend.html)**.
 Double-click it (or open it in any browser) — no install, no server, no account, works offline.
 All data stays in that browser's local storage; nothing ever leaves your machine.
 
+Works the same on a phone: under ~768px wide, the page switches to a bottom tab bar (Home, Ledger,
+Cards, Accounts, More) instead of the desktop's row of tab buttons — Home is the dashboard (the
+headline number, tiles, and 60-day runway); everything else that doesn't fit in the bar (Recurring,
+Import CSV, Backup, Settings) lives behind **More**. Forms stack into single-column fields sized
+for touch, and wide tables scroll horizontally within their own box instead of the whole page.
+
 ## The one rule it enforces (no double counting)
 
 - A **card purchase** is the real spending event. The moment you log it, it raises that card's
