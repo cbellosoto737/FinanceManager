@@ -41,10 +41,13 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow-x: hidden; }
   body {
     background: var(--bg); color: var(--ink);
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow-x: hidden;
   }
+  table, img, svg { max-width: 100%; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 16px 16px 64px; }
   header.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; margin: 8px 0 14px; }
   header.top h1 { font-size: 18px; margin: 0; font-weight: 650; }
@@ -104,6 +107,12 @@
   /* ---- runway ---- */
   details.runway { margin-top: 14px; }
   details.runway summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 6px 2px; color: var(--ink2); }
+  .runway-toggle { display: flex; gap: 7px; align-items: baseline; font-size: 12.5px; color: var(--ink2); margin: 2px 2px 8px; cursor: pointer; }
+  .runway-toggle input { flex-shrink: 0; }
+  td.netcol, th.netcol { color: var(--ink2); }
+  .runway.hide-net .netcol { display: none; }
+  td.net-neg { color: var(--bad-text); }
+  td.net-low { color: var(--warn-text); }
   .runway-scroll { max-height: 340px; overflow: auto; border: 1px solid var(--hairline); border-radius: 10px; margin-top: 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
   th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 7px 10px; border-bottom: 1px solid var(--hairline); position: sticky; top: 0; background: var(--surface); }
@@ -164,6 +173,72 @@
   .help { margin-top: 14px; }
   .help summary { cursor: pointer; color: var(--ink2); font-size: 13px; }
   .help div { color: var(--ink2); font-size: 13.5px; max-width: 640px; }
+
+  /* ---- mobile app tabs ---- */
+  @media (min-width: 769px) {
+    #panel-dashboard { display: block !important; }
+  }
+  .bottom-tabs {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: var(--surface); border-top: 1px solid var(--hairline);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+  }
+  .bt-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: transparent; border: 0; color: var(--ink2); font: inherit; font-size: 10.5px;
+    padding: 6px 2px; border-radius: 10px; cursor: pointer;
+  }
+  .bt-btn svg { width: 22px; height: 22px; }
+  .bt-btn.on { color: var(--accent); }
+  .sheet-item {
+    display: block; width: 100%; text-align: left; font: inherit; font-size: 15px;
+    padding: 13px 4px; border: 0; border-bottom: 1px solid var(--hairline);
+    background: transparent; color: var(--ink); cursor: pointer;
+  }
+  .sheet-item:last-child { border-bottom: 0; }
+  .sheet-item.on { color: var(--accent); font-weight: 600; }
+  @media (max-width: 768px) {
+    body { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+    nav.tabs#tabRow { display: none; }
+    .bottom-tabs { display: flex; }
+    .wrap { max-width: 100%; padding: 14px 16px 28px; }
+    header.top h1 { font-size: 19px; }
+    .frow { flex-direction: column; align-items: stretch; gap: 14px; }
+    .f { width: 100%; }
+    .f > span { font-size: 13px; }
+    .frow input, .frow select, .frow textarea,
+    .f input, .f select, .f textarea { width: 100%; max-width: 100%; }
+    input, select, textarea { font-size: 16px; padding: 10px 12px; min-height: 46px; }
+    textarea { min-height: 90px; }
+    button.primary, button.ghost, button.danger { min-height: 48px; font-size: 15px; padding: 10px 16px; }
+    #quickAdd button.primary { width: 100%; }
+    .card { padding: 18px 16px; }
+    .hero { padding: 26px 16px 22px; }
+    .hero .label { font-size: 14.5px; }
+    .hero .value { font-size: 46px; }
+    .hero .sub { font-size: 13.5px; }
+    .canspend { flex-direction: column; align-items: stretch; }
+    .canspend input { width: 100%; font-size: 20px; padding: 10px 12px; }
+    .verdict { text-align: center; min-width: 0; }
+    .modes { width: 100%; }
+    .modes button { flex: 1; padding: 9px 6px; font-size: 13px; }
+    .tiles { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .tile { padding: 13px 14px; }
+    .tile .t-value { font-size: 21px; }
+    table { font-size: 13.5px; }
+    th, td { padding: 9px 10px; }
+    .panel h2 { font-size: 16.5px; }
+    dialog#moreDlg {
+      position: fixed; left: 0; right: 0; bottom: 0; top: auto; margin: 0;
+      width: 100%; max-width: 100%; border-radius: 16px 16px 0 0;
+      padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+  }
+  @media (max-width: 400px) {
+    .tiles { grid-template-columns: 1fr; }
+    .hero .value { font-size: 40px; }
+  }
 </style>
 </head>
 <body>
@@ -174,6 +249,7 @@
   </header>
 
   <!-- ============ DASHBOARD ============ -->
+  <section class="panel" id="panel-dashboard">
   <div class="card hero">
     <div class="label">Safe to spend now</div>
     <div class="value" id="stsValue">–</div>
@@ -198,9 +274,10 @@
 
   <details class="runway" id="runwayBox" open>
     <summary id="runwaySummary">60-day checking runway</summary>
+    <label class="runway-toggle"><input type="checkbox" id="runwayNet" checked> Show <b>Net after cards</b> — projected checking minus unfunded card debt (closer to Safe to Spend)</label>
     <div class="runway-scroll">
       <table>
-        <thead><tr><th>Date</th><th class="num">In</th><th class="num">Out</th><th class="num">Projected checking</th><th>State</th></tr></thead>
+        <thead><tr><th>Date</th><th class="num">In</th><th class="num">Out</th><th class="num">Projected checking</th><th class="num netcol">Net after cards</th><th>State</th></tr></thead>
         <tbody id="runwayBody"></tbody>
       </table>
     </div>
@@ -214,9 +291,10 @@
       immediately subtracted from Safe to Spend below — no cash leaves checking yet, but the debt is real, so
       it counts right away rather than staying invisible until a statement payment eventually gets scheduled.
       The later <b>card payment</b> is just a transfer of cash from checking to the card — never a second
-      expense. Reconciling moves that same amount from "unfunded" into "scheduled outflow" (or, if the due date
-      falls after your next payday, off the near-term radar entirely) — either way, the headline can only hold
-      steady or improve once the real due date is known, never drop as a surprise later.</p>
+      expense. Log one with the <b>Pay</b> button on the Cards tab (Reconcile is only for entering a new
+      statement balance). Reconciling — or paying — moves that amount from "unfunded" into "scheduled outflow"
+      (or, if the due date falls after your next payday, off the near-term radar entirely) — either way, the
+      headline can only hold steady or improve once the real due date is known, never drop as a surprise later.</p>
       <p><b>Safe to spend</b> = spendable checking − your cash reserve − everything scheduled to leave checking
       before the next payday (+ anything scheduled to arrive before then) − every card's unfunded balance.
       Moderate adds the next paycheck; Aggressive adds savings backup. Only rows that actually move cash, plus
@@ -226,6 +304,7 @@
       clear or delete it, so the app flags anything over two weeks stale.</p>
     </div>
   </details>
+  </section>
 
   <!-- ============ TABS ============ -->
   <nav class="tabs" id="tabRow">
@@ -248,6 +327,7 @@
           <option value="expense">Expense</option>
           <option value="income">Money in</option>
           <option value="refund">Refund / credit</option>
+          <option value="cardpay">Card payment…</option>
         </select></div>
       <div class="f"><span>Paid with / into</span><select id="qaWith"></select></div>
       <div class="f"><span>When</span><input id="qaDate" type="date"></div>
@@ -458,95 +538,122 @@
   </section>
 </div>
 
+<nav class="bottom-tabs" id="bottomTabs" aria-label="Primary">
+  <button class="bt-btn" data-tab="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 5l8 6.5M6 10v8.5a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1V10"/></svg>
+    <span>Home</span>
+  </button>
+  <button class="bt-btn" data-tab="ledger">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="5" y1="7" x2="19" y2="7"/><line x1="5" y1="12" x2="19" y2="12"/><line x1="5" y1="17" x2="19" y2="17"/></svg>
+    <span>Ledger</span>
+  </button>
+  <button class="bt-btn" data-tab="cards">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span>Cards</span>
+  </button>
+  <button class="bt-btn" data-tab="accounts">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="2"/><circle cx="16" cy="13" r="1.6"/></svg>
+    <span>Accounts</span>
+  </button>
+  <button class="bt-btn" id="moreTabBtn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+    <span>More</span>
+  </button>
+</nav>
+
 <dialog id="dlg"></dialog>
+<dialog id="moreDlg">
+  <h3>More</h3>
+  <div>
+    <button class="sheet-item" data-tab="recurring">Recurring bills &amp; income</button>
+    <button class="sheet-item" data-tab="import">Import CSV</button>
+    <button class="sheet-item" data-tab="backup">Backup &amp; restore</button>
+    <button class="sheet-item" data-tab="settings">Settings</button>
+  </div>
+  <div class="dlg-actions"><button class="ghost" id="moreClose">Close</button></div>
+</dialog>
 
 <script>
 /*ENGINE-START*/
 'use strict';
 
-// ---------- Seed data (from SafeToSpend_Model.xlsx) ----------
-const SEED = {
-  version: 1,
-  settings: {
-    payFrequency: "Biweekly",
-    lastPayday: "2024-07-05",
-    nextPayday: "2024-07-19",
-    netPerPaycheck: 1427.01,
-    reserve: 1000,
-    mode: "Conservative",
-    horizonDays: 60,
-    asOfMode: "fixed",
-    asOfDate: "2024-07-12"
-  },
-  accounts: [
-    { name: "Popular Checking", type: "Checking", institution: "Popular", balance: 768.84, spendable: true },
-    { name: "Citi Checking", type: "Checking", institution: "Citi", balance: 1571.31, spendable: true },
-    { name: "Coinbase Card", type: "Checking", institution: "Coinbase", balance: 476, spendable: true },
-    { name: "SoFi", type: "Savings", institution: "SoFi", balance: 7526.35, spendable: false },
-    { name: "Popular Savings", type: "Savings", institution: "Popular", balance: 386.29, spendable: false },
-    { name: "Citi Savings", type: "Savings", institution: "Citi", balance: 1241.90, spendable: false },
-    { name: "Chase Savings", type: "Savings", institution: "Chase", balance: 619.52, spendable: false },
-    { name: "Popular Online High Rise", type: "Savings", institution: "Popular", balance: 61854.98, spendable: false },
-    { name: "Optum (HSA/Finance)", type: "Savings", institution: "Optum", balance: 0, spendable: false },
-    { name: "Robinhood Roth IRA", type: "Investment", institution: "Robinhood", balance: 2700, spendable: false },
-    { name: "Acorns", type: "Investment", institution: "Acorns", balance: 2700, spendable: false },
-    { name: "Fidelity 401k", type: "Investment", institution: "Fidelity", balance: 17778, spendable: false }
-  ],
-  cards: [
-    { name: "Best Buy CC", balance: 735.89, statementBalance: 863, dueDate: "2024-08-05", autopayMode: "Full", autopayAmount: null, funded: 863, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" },
-    { name: "Amazon CC", balance: 1571.23, statementBalance: 1655.56, dueDate: "2024-07-23", autopayMode: "Full", autopayAmount: null, funded: 1000, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" },
-    { name: "Discover CC", balance: 1998.39, statementBalance: 2023, dueDate: "2024-07-11", autopayMode: "Full", autopayAmount: null, funded: 2023, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" },
-    { name: "Chase Sapphire CC", balance: 618.73, statementBalance: 643.45, dueDate: "2024-07-22", autopayMode: "Full", autopayAmount: null, funded: 643.45, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" },
-    { name: "PayPal Credit", balance: 1793.82, statementBalance: 1793.82, dueDate: "2024-08-02", autopayMode: "Full", autopayAmount: null, funded: 800, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" },
-    { name: "Sam's Club MC", balance: 282.26, statementBalance: 282.26, dueDate: "2024-08-03", autopayMode: "Full", autopayAmount: null, funded: 282.26, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" },
-    { name: "OneKey Expedia", balance: 86.76, statementBalance: 86.76, dueDate: "2024-07-25", autopayMode: "Min", autopayAmount: 35, funded: 0, activeForSpend: true, treatAs: "Card", payFrom: "Popular Checking" }
-  ],
-  recurring: [
-    { id: "MORTG",  name: "Mortgage", category: "Housing", amount: 1300, frequency: "Monthly", nextDate: "2024-08-01", payMethod: "Popular Checking", autopay: false, mandatory: true },
-    { id: "FIBER",  name: "Google Fiber", category: "Utility", amount: 70.70, frequency: "Monthly", nextDate: "2024-07-16", payMethod: "Best Buy CC", autopay: true, mandatory: true },
-    { id: "KCWATER",name: "KC Water", category: "Utility", amount: 156.45, frequency: "Monthly", nextDate: "2024-07-16", payMethod: "Best Buy CC", autopay: false, mandatory: true },
-    { id: "EVERGY", name: "Evergy Electric", category: "Utility", amount: 90.46, frequency: "Monthly", nextDate: "2024-07-20", payMethod: "Best Buy CC", autopay: true, mandatory: true },
-    { id: "SPIRE",  name: "Spire Gas", category: "Utility", amount: 69.17, frequency: "Monthly", nextDate: "2024-08-06", payMethod: "Best Buy CC", autopay: true, mandatory: true },
-    { id: "TMOBILE",name: "T-Mobile", category: "Utility", amount: 68.81, frequency: "Monthly", nextDate: "2024-07-22", payMethod: "Citi Checking", autopay: false, mandatory: true },
-    { id: "NETFLIX",name: "Netflix", category: "Subscription", amount: 15.49, frequency: "Monthly", nextDate: "2024-08-01", payMethod: "PayPal Credit", autopay: true, mandatory: false },
-    { id: "GSTORE", name: "Google Storage", category: "Subscription", amount: 9.99, frequency: "Monthly", nextDate: "2024-07-23", payMethod: "Best Buy CC", autopay: true, mandatory: false },
-    { id: "PRIM-S", name: "Primerica (Sara)", category: "Insurance", amount: 50, frequency: "Monthly", nextDate: "2024-07-29", payMethod: "Popular Checking", autopay: true, mandatory: true },
-    { id: "PRIM-C", name: "Primerica (Chris)", category: "Insurance", amount: 50, frequency: "Monthly", nextDate: "2024-07-20", payMethod: "Popular Checking", autopay: true, mandatory: true },
-    { id: "HEALTH", name: "Health Insurance", category: "Insurance", amount: 58, frequency: "Monthly", nextDate: "2024-08-01", payMethod: "Popular Checking", autopay: true, mandatory: true },
-    { id: "ROBIN",  name: "Robinhood IRA", category: "Investment", amount: 150, frequency: "Monthly", nextDate: "2024-08-09", payMethod: "Popular Checking", autopay: true, mandatory: false },
-    { id: "MEDFIN", name: "Medical Financing", category: "Financing", amount: 67.23, frequency: "Monthly", nextDate: "2024-07-16", payMethod: "Best Buy CC", autopay: true, mandatory: true },
-    { id: "SAMSW",  name: "Samsung Watch", category: "Financing", amount: 3.34, frequency: "Monthly", nextDate: "2024-08-14", payMethod: "Popular Checking", autopay: true, mandatory: true },
-    { id: "CARINS", name: "Car Insurance", category: "Insurance", amount: 700, frequency: "Yearly", nextDate: "2025-05-01", payMethod: "Chase Sapphire CC", autopay: false, mandatory: true },
-    { id: "GAS",    name: "Gasoline (est.)", category: "Variable", amount: 186.32, frequency: "Monthly-est", nextDate: null, payMethod: "Best Buy CC", autopay: false, mandatory: false },
-    { id: "GROC",   name: "Groceries (est.)", category: "Variable", amount: 376.17, frequency: "Monthly-est", nextDate: null, payMethod: "Best Buy CC", autopay: false, mandatory: false },
-    { id: "REST",   name: "Restaurants (est.)", category: "Variable", amount: 221.46, frequency: "Monthly-est", nextDate: null, payMethod: "Chase Sapphire CC", autopay: false, mandatory: false }
-  ],
-  ledger: [
-    { id: 1,  date: "2024-07-12", type: "income", description: "Paycheck (biweekly net)", category: "Income", amount: 1427.01, source: "Employer", dest: "Popular Checking", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "PAY", notes: "Auto" },
-    { id: 2,  date: "2024-07-12", type: "card_purchase", description: "Groceries - Sam's Club", category: "Groceries", amount: -96, source: "", dest: "Best Buy CC", payMethod: "Card", cardName: "Best Buy CC", cashImpact: false, mandatory: false, status: "Cleared", inSTS: true, recurringId: "", notes: "Real spend today" },
-    { id: 3,  date: "2024-07-13", type: "cash_expense", description: "Parking meter", category: "Transportation", amount: -12, source: "Popular Checking", dest: "", payMethod: "Debit", cardName: "", cashImpact: true, mandatory: false, status: "Cleared", inSTS: true, recurringId: "", notes: "No card accepted" },
-    { id: 4,  date: "2024-07-11", type: "card_payment", description: "Discover statement payment", category: "Transfer", amount: -2023, source: "Popular Checking", dest: "Discover CC", payMethod: "ACH", cardName: "Discover CC", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer, NOT an expense" },
-    { id: 5,  date: "2024-07-16", type: "recurring", description: "KC Water", category: "Utility", amount: -156.45, source: "", dest: "Best Buy CC", payMethod: "Card", cardName: "Best Buy CC", cashImpact: false, mandatory: true, status: "Pending", inSTS: true, recurringId: "KCWATER", notes: "Posts to card" },
-    { id: 6,  date: "2024-07-16", type: "recurring", description: "Medical Financing payment", category: "Financing", amount: -67.23, source: "", dest: "Best Buy CC", payMethod: "Card", cardName: "Best Buy CC", cashImpact: false, mandatory: true, status: "Pending", inSTS: true, recurringId: "MEDFIN", notes: "Fixed payment" },
-    { id: 7,  date: "2024-07-20", type: "recurring", description: "Evergy Electric", category: "Utility", amount: -90.46, source: "", dest: "Best Buy CC", payMethod: "Card", cardName: "Best Buy CC", cashImpact: false, mandatory: true, status: "Pending", inSTS: true, recurringId: "EVERGY", notes: "" },
-    { id: 8,  date: "2024-07-20", type: "recurring", description: "Primerica (Chris)", category: "Insurance", amount: -50, source: "Popular Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "PRIM-C", notes: "Leaves checking" },
-    { id: 9,  date: "2024-07-22", type: "card_payment", description: "Chase Sapphire statement", category: "Transfer", amount: -643.45, source: "Popular Checking", dest: "Chase Sapphire CC", payMethod: "ACH", cardName: "Chase Sapphire CC", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
-    { id: 10, date: "2024-07-22", type: "recurring", description: "T-Mobile", category: "Utility", amount: -68.81, source: "Citi Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "TMOBILE", notes: "Leaves checking" },
-    { id: 11, date: "2024-07-23", type: "card_payment", description: "Amazon statement", category: "Transfer", amount: -1655.56, source: "Popular Checking", dest: "Amazon CC", payMethod: "ACH", cardName: "Amazon CC", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
-    { id: 12, date: "2024-07-25", type: "card_payment", description: "OneKey Expedia (min)", category: "Transfer", amount: -35, source: "Popular Checking", dest: "OneKey Expedia", payMethod: "ACH", cardName: "OneKey Expedia", cashImpact: true, mandatory: false, status: "Pending", inSTS: false, recurringId: "", notes: "Carrying balance" },
-    { id: 13, date: "2024-07-26", type: "planned_spend", description: "Anniversary dinner (planned)", category: "Discretionary", amount: -150, source: "", dest: "Chase Sapphire CC", payMethod: "Card", cardName: "Chase Sapphire CC", cashImpact: false, mandatory: false, status: "Pending", inSTS: true, recurringId: "", notes: "Optional - can cancel" },
-    { id: 14, date: "2024-07-29", type: "recurring", description: "Primerica (Sara)", category: "Insurance", amount: -50, source: "Popular Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "PRIM-S", notes: "" },
-    { id: 15, date: "2024-07-31", type: "medical_payment", description: "Menorah Medical bill", category: "Medical", amount: -154.46, source: "Popular Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "", notes: "Surprise bill" },
-    { id: 16, date: "2024-08-01", type: "recurring", description: "Mortgage", category: "Housing", amount: -1300, source: "Popular Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "MORTG", notes: "Big monthly hit" },
-    { id: 17, date: "2024-08-01", type: "recurring", description: "Health Insurance", category: "Insurance", amount: -58, source: "Popular Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "HEALTH", notes: "" },
-    { id: 18, date: "2024-08-02", type: "income", description: "Paycheck (biweekly net)", category: "Income", amount: 1427.01, source: "Employer", dest: "Popular Checking", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "PAY", notes: "" },
-    { id: 19, date: "2024-08-02", type: "card_payment", description: "PayPal Credit statement", category: "Transfer", amount: -1793.82, source: "Popular Checking", dest: "PayPal Credit", payMethod: "ACH", cardName: "PayPal Credit", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
-    { id: 20, date: "2024-08-03", type: "card_payment", description: "Sam's Club MC statement", category: "Transfer", amount: -282.26, source: "Popular Checking", dest: "Sam's Club MC", payMethod: "ACH", cardName: "Sam's Club MC", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
-    { id: 21, date: "2024-08-05", type: "card_payment", description: "Best Buy CC statement", category: "Transfer", amount: -863, source: "Popular Checking", dest: "Best Buy CC", payMethod: "ACH", cardName: "Best Buy CC", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
-    { id: 22, date: "2024-07-18", type: "refund", description: "Amazon return refund", category: "Refund", amount: 25.85, source: "", dest: "Amazon CC", payMethod: "Card", cardName: "Amazon CC", cashImpact: false, mandatory: false, status: "Pending", inSTS: true, recurringId: "", notes: "Reduces card owed" }
-  ],
-  nextId: 23
-};
+// ---------- Seed data ----------
+// Built relative to whatever "today" is when the app first loads, so the sample never goes stale or
+// shows dates from a random past year. Everything here is generic placeholder data -- swap it for
+// your own on the Accounts / Cards / Recurring tabs, or Reset to seed to get this demo back.
+// buildSeed accepts an explicit "today" so tests can pin it; the app calls it with the real date.
+function buildSeed(todayStr) {
+  const pad = n => String(n).padStart(2, "0");
+  const t0 = todayStr || (() => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })();
+  const base = (() => { const [y, m, d] = t0.split("-").map(Number); return new Date(y, m - 1, d, 12); })();
+  const toStr = dt => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  const dd = n => { const dt = new Date(base); dt.setDate(dt.getDate() + n); return toStr(dt); };
+  let _id = 1; const nid = () => _id++;
+  return {
+    version: 1,
+    settings: {
+      payFrequency: "Biweekly",
+      lastPayday: dd(-4),
+      nextPayday: dd(10),
+      netPerPaycheck: 1500,
+      reserve: 1000,
+      mode: "Conservative",
+      horizonDays: 60,
+      asOfMode: "today",
+      asOfDate: t0
+    },
+    accounts: [
+      { name: "Everyday Checking", type: "Checking", institution: "Sample Bank", balance: 2450, spendable: true, reconciledThrough: t0 },
+      { name: "Bills Checking", type: "Checking", institution: "Sample Bank", balance: 1180, spendable: true, reconciledThrough: t0 },
+      { name: "Emergency Fund", type: "Savings", institution: "Sample Bank", balance: 8200, spendable: false, reconciledThrough: t0 },
+      { name: "Vacation Fund", type: "Savings", institution: "Sample Bank", balance: 1350, spendable: false, reconciledThrough: t0 },
+      { name: "Brokerage", type: "Investment", institution: "Sample Broker", balance: 14200, spendable: false, reconciledThrough: t0 }
+    ],
+    cards: [
+      { name: "Rewards Card", balance: 720, statementBalance: 845, dueDate: dd(24), autopayMode: "Full", autopayAmount: null, activeForSpend: true, treatAs: "Card", payFrom: "Everyday Checking", reconciledThrough: t0 },
+      { name: "Everyday Card", balance: 1560, statementBalance: 1640, dueDate: dd(11), autopayMode: "Full", autopayAmount: null, activeForSpend: true, treatAs: "Card", payFrom: "Everyday Checking", reconciledThrough: t0 },
+      { name: "Travel Card", balance: 610, statementBalance: 640, dueDate: dd(9), autopayMode: "Full", autopayAmount: null, activeForSpend: true, treatAs: "Card", payFrom: "Everyday Checking", reconciledThrough: t0 },
+      { name: "Store Card", balance: 275, statementBalance: 275, dueDate: dd(22), autopayMode: "Full", autopayAmount: null, activeForSpend: true, treatAs: "Card", payFrom: "Everyday Checking", reconciledThrough: t0 },
+      { name: "Flex Card", balance: 240, statementBalance: 240, dueDate: dd(13), autopayMode: "Min", autopayAmount: 40, activeForSpend: true, treatAs: "Card", payFrom: "Everyday Checking", reconciledThrough: t0 }
+    ],
+    recurring: [
+      { id: "PAY",    name: "Paycheck", category: "Income", amount: 1500, frequency: "Biweekly", nextDate: dd(10), payMethod: "Everyday Checking", kind: "income", autopay: true, mandatory: true },
+      { id: "RENT",   name: "Rent", category: "Housing", amount: 1300, frequency: "Monthly", nextDate: dd(19), payMethod: "Bills Checking", autopay: false, mandatory: true },
+      { id: "CARLOAN",name: "Car payment", category: "Financing", amount: 300, frequency: "Monthly", nextDate: dd(12), payMethod: "Everyday Checking", autopay: true, mandatory: true },
+      { id: "INSUR",  name: "Insurance", category: "Insurance", amount: 120, frequency: "Monthly", nextDate: dd(1), payMethod: "Everyday Checking", autopay: true, mandatory: true },
+      { id: "ELEC",   name: "Electric", category: "Utility", amount: 95, frequency: "Monthly", nextDate: dd(8), payMethod: "Rewards Card", autopay: true, mandatory: true },
+      { id: "WATER",  name: "Water", category: "Utility", amount: 55, frequency: "Monthly", nextDate: dd(8), payMethod: "Rewards Card", autopay: false, mandatory: true },
+      { id: "NET",    name: "Internet", category: "Utility", amount: 70, frequency: "Monthly", nextDate: dd(4), payMethod: "Rewards Card", autopay: true, mandatory: true },
+      { id: "PHONE",  name: "Phone", category: "Utility", amount: 65, frequency: "Monthly", nextDate: dd(14), payMethod: "Bills Checking", autopay: true, mandatory: true },
+      { id: "GYM",    name: "Gym", category: "Health", amount: 40, frequency: "Monthly", nextDate: dd(6), payMethod: "Everyday Checking", autopay: true, mandatory: false },
+      { id: "STREAM", name: "Streaming", category: "Subscription", amount: 16, frequency: "Monthly", nextDate: dd(20), payMethod: "Everyday Card", autopay: true, mandatory: false }
+    ],
+    ledger: [
+      { id: nid(), date: dd(-4), type: "income", description: "Paycheck", category: "Income", amount: 1500, source: "Employer", dest: "Everyday Checking", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Cleared", inSTS: true, recurringId: "PAY", notes: "" },
+      { id: nid(), date: dd(-1), type: "card_purchase", description: "Groceries", category: "Groceries", amount: -85, source: "", dest: "Everyday Card", payMethod: "Card", cardName: "Everyday Card", cashImpact: false, mandatory: false, status: "Cleared", inSTS: true, recurringId: "", notes: "" },
+      { id: nid(), date: dd(-2), type: "cash_expense", description: "Coffee shop", category: "Dining", amount: -6, source: "Everyday Checking", dest: "", payMethod: "Debit", cardName: "", cashImpact: true, mandatory: false, status: "Cleared", inSTS: true, recurringId: "", notes: "" },
+      { id: nid(), date: dd(-1), type: "refund", description: "Returned item", category: "Refund", amount: 22, source: "", dest: "Everyday Card", payMethod: "Card", cardName: "Everyday Card", cashImpact: false, mandatory: false, status: "Pending", inSTS: true, recurringId: "", notes: "Reduces card owed" },
+      { id: nid(), date: dd(1), type: "recurring", description: "Insurance", category: "Insurance", amount: -120, source: "Everyday Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "INSUR", notes: "" },
+      { id: nid(), date: dd(4), type: "recurring", description: "Internet", category: "Utility", amount: -70, source: "", dest: "Rewards Card", payMethod: "Card", cardName: "Rewards Card", cashImpact: false, mandatory: true, status: "Pending", inSTS: true, recurringId: "NET", notes: "Posts to card" },
+      { id: nid(), date: dd(6), type: "recurring", description: "Gym", category: "Health", amount: -40, source: "Everyday Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: false, status: "Pending", inSTS: true, recurringId: "GYM", notes: "" },
+      { id: nid(), date: dd(8), type: "recurring", description: "Electric", category: "Utility", amount: -95, source: "", dest: "Rewards Card", payMethod: "Card", cardName: "Rewards Card", cashImpact: false, mandatory: true, status: "Pending", inSTS: true, recurringId: "ELEC", notes: "Posts to card" },
+      { id: nid(), date: dd(8), type: "recurring", description: "Water", category: "Utility", amount: -55, source: "", dest: "Rewards Card", payMethod: "Card", cardName: "Rewards Card", cashImpact: false, mandatory: true, status: "Pending", inSTS: true, recurringId: "WATER", notes: "Posts to card" },
+      { id: nid(), date: dd(9), type: "card_payment", description: "Travel Card statement payment", category: "Transfer", amount: -640, source: "Everyday Checking", dest: "Travel Card", payMethod: "ACH", cardName: "Travel Card", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer, not an expense" },
+      { id: nid(), date: dd(11), type: "card_payment", description: "Everyday Card statement payment", category: "Transfer", amount: -1640, source: "Everyday Checking", dest: "Everyday Card", payMethod: "ACH", cardName: "Everyday Card", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
+      { id: nid(), date: dd(12), type: "recurring", description: "Car payment", category: "Financing", amount: -300, source: "Everyday Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "CARLOAN", notes: "" },
+      { id: nid(), date: dd(13), type: "card_payment", description: "Flex Card statement payment (min)", category: "Transfer", amount: -40, source: "Everyday Checking", dest: "Flex Card", payMethod: "ACH", cardName: "Flex Card", cashImpact: true, mandatory: false, status: "Pending", inSTS: false, recurringId: "", notes: "Minimum only -- carrying a balance" },
+      { id: nid(), date: dd(14), type: "recurring", description: "Phone", category: "Utility", amount: -65, source: "Bills Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "PHONE", notes: "" },
+      { id: nid(), date: dd(16), type: "planned_spend", description: "Concert tickets (planned)", category: "Discretionary", amount: -120, source: "", dest: "Travel Card", payMethod: "Card", cardName: "Travel Card", cashImpact: false, mandatory: false, status: "Pending", inSTS: true, recurringId: "", notes: "Optional -- can cancel" },
+      { id: nid(), date: dd(19), type: "recurring", description: "Rent", category: "Housing", amount: -1300, source: "Bills Checking", dest: "", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "RENT", notes: "Big monthly hit" },
+      { id: nid(), date: dd(20), type: "recurring", description: "Streaming", category: "Subscription", amount: -16, source: "", dest: "Everyday Card", payMethod: "Card", cardName: "Everyday Card", cashImpact: false, mandatory: false, status: "Pending", inSTS: true, recurringId: "STREAM", notes: "Posts to card" },
+      { id: nid(), date: dd(22), type: "card_payment", description: "Store Card statement payment", category: "Transfer", amount: -275, source: "Everyday Checking", dest: "Store Card", payMethod: "ACH", cardName: "Store Card", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
+      { id: nid(), date: dd(24), type: "card_payment", description: "Rewards Card statement payment", category: "Transfer", amount: -845, source: "Everyday Checking", dest: "Rewards Card", payMethod: "ACH", cardName: "Rewards Card", cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: "Transfer" },
+      { id: nid(), date: dd(24), type: "income", description: "Paycheck", category: "Income", amount: 1500, source: "Employer", dest: "Everyday Checking", payMethod: "ACH", cardName: "", cashImpact: true, mandatory: true, status: "Pending", inSTS: true, recurringId: "PAY", notes: "" }
+    ],
+    nextId: _id
+  };
+}
+const SEED = buildSeed();
 
 // ---------- Pure calculation engine (no DOM) ----------
 const STS = (() => {
@@ -626,8 +733,13 @@ const STS = (() => {
   function accountNewActivity(db, a) {
     let delta = 0;
     const anchor = accountAnchorDate(a);
+    const asOfD = asOf(db);
     for (const e of db.ledger) {
-      if (isCash(e) && e.status === "Cleared" && e.date >= anchor && (e.source === a.name || e.dest === a.name)) delta += e.amount;
+      // "Cleared" means it actually happened, so it belongs in the balance -- but only once its date
+      // has arrived. A Cleared row dated in the FUTURE (e.g. a card payment you scheduled for its due
+      // date and pre-marked Cleared) hasn't left your account yet, so it must not drag the current
+      // balance down early. Cap at the as-of date; when that date arrives, it rolls in on its own.
+      if (isCash(e) && e.status === "Cleared" && e.date >= anchor && e.date <= asOfD && (e.source === a.name || e.dest === a.name)) delta += e.amount;
     }
     return r2(delta);
   }
@@ -697,12 +809,16 @@ const STS = (() => {
     return r2(owed);
   }
 
-  // Funded = cash already scheduled to pay this card down — the one pending statement-payment
-  // transfer that Reconcile keeps in the ledger. Unfunded is whatever's owed beyond that: real spend
-  // (or a minimum-only autopay) with no scheduled payment behind it yet.
+  // Funded = cash already scheduled to pay this card down. That's every pending cash-transfer payment
+  // aimed at this card — the statement payment Reconcile keeps in the ledger, PLUS any ad-hoc
+  // payments logged via the Pay button (Card Payment modal). Unfunded is whatever's owed beyond that:
+  // real spend (or a minimum-only autopay) with no scheduled payment behind it yet.
   function cardFunded(db, c) {
-    const pend = db.ledger.find(e => notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending" && e.cashImpact);
-    return pend ? r2(Math.abs(pend.amount)) : 0;
+    let f = 0;
+    for (const e of db.ledger) {
+      if (notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending" && e.cashImpact) f += Math.abs(e.amount);
+    }
+    return r2(f);
   }
   const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - cardFunded(db, c))) : 0;
   const totalUnfunded = db => r2(db.cards.reduce((s, c) => s + cardUnfunded(db, c), 0));
@@ -757,17 +873,26 @@ const STS = (() => {
         byDate.set(e.date, m);
       }
     }
+    // The "net" line offsets every day's projected checking by the card debt that has no scheduled
+    // payment behind it yet (the same unfunded figure Safe to Spend subtracts). Scheduled statement
+    // payments already dip the cash line on their due dates, so they're not double-counted here; only
+    // the un-scheduled remainder is a flat drag. Day 1 of the net line therefore lands right around
+    // the Safe-to-Spend number, which is what makes this the "more complete" view of the runway.
+    const unfunded = totalUnfunded(db);
     const rows = [];
-    let bal = spendableChecking(db), low = Infinity, lowDate = asOfD, d = asOfD;
+    let bal = spendableChecking(db), low = Infinity, lowDate = asOfD, netLow = Infinity, netLowDate = asOfD, d = asOfD;
     for (let i = 0; i <= horizon; i++) {
       const m = byDate.get(d) || { inn: 0, out: 0 };
       bal = r2(bal + m.inn + m.out);
+      const net = r2(bal - unfunded);
       const state = bal < 0 ? "neg" : bal < reserve ? "low" : "ok";
-      rows.push({ date: d, inn: r2(m.inn), out: r2(m.out), balance: bal, state });
+      const netState = net < 0 ? "neg" : net < reserve ? "low" : "ok";
+      rows.push({ date: d, inn: r2(m.inn), out: r2(m.out), balance: bal, net, state, netState });
       if (bal < low) { low = bal; lowDate = d; }
+      if (net < netLow) { netLow = net; netLowDate = d; }
       d = addDays(d, 1);
     }
-    return { rows, low: r2(low), lowDate };
+    return { rows, low: r2(low), lowDate, net: { low: r2(netLow), lowDate: netLowDate }, unfunded };
   }
 
   // Recurring instances due within the horizon that have no ledger event yet.
@@ -1035,7 +1160,7 @@ function load() {
       if (d && d.settings && Array.isArray(d.ledger)) return STS.ensureAccountAnchors(d);
     }
   } catch (e) { /* corrupted storage: fall through to seed */ }
-  return STS.ensureAccountAnchors(structuredClone(SEED));
+  return STS.ensureAccountAnchors(buildSeed());
 }
 function save() { localStorage.setItem(KEY, JSON.stringify(DB)); render(); }
 
@@ -1150,12 +1275,14 @@ function render() {
 
   // runway
   $("runwaySummary").textContent = DB.settings.horizonDays + "-day checking runway";
+  $("runwayBox").classList.toggle("hide-net", !$("runwayNet").checked);
   $("runwayBody").innerHTML = C.proj.rows.map(r => {
     const chip = r.state === "neg" ? '<span class="chip bad">● Negative</span>'
       : r.state === "low" ? '<span class="chip warn">● Below reserve</span>'
       : '<span class="chip good">● OK</span>';
     const quiet = r.inn === 0 && r.out === 0 ? ' class="quiet"' : "";
-    return `<tr${quiet}><td>${fmtDate(r.date)}</td><td class="num">${r.inn ? fmt$(r.inn) : ""}</td><td class="num">${r.out ? fmt$(r.out) : ""}</td><td class="num">${fmt$(r.balance)}</td><td>${chip}</td></tr>`;
+    const netCls = "num netcol" + (r.netState === "neg" ? " net-neg" : r.netState === "low" ? " net-low" : "");
+    return `<tr${quiet}><td>${fmtDate(r.date)}</td><td class="num">${r.inn ? fmt$(r.inn) : ""}</td><td class="num">${r.out ? fmt$(r.out) : ""}</td><td class="num">${fmt$(r.balance)}</td><td class="${netCls}">${fmt$(r.net)}</td><td>${chip}</td></tr>`;
   }).join("");
 
   renderVerdict(C);
@@ -1197,6 +1324,9 @@ function renderQuickAddOptions() {
   $("catList").innerHTML = [...new Set(DB.ledger.map(e => e.category).filter(Boolean))].map(c => `<option value="${esc(c)}">`).join("");
 }
 function quickAdd() {
+  // Card payments have two endpoints (a checking account AND a card), so they get their own modal
+  // instead of the single "paid with / into" picker the other kinds share.
+  if ($("qaKind").value === "cardpay") { openCardPayment(-1); return; }
   const desc = $("qaDesc").value.trim();
   const amt = parseFloat($("qaAmt").value);
   const date = $("qaDate").value || STS.asOf(DB);
@@ -1378,7 +1508,8 @@ function renderCards() {
       <td>${esc(auto)}</td>
       <td class="num">${fmt$(funded)}</td>
       <td class="num">${unf > 0 ? `<span class="chip warn">${fmt$(unf)}</span>` : fmt$(0)}</td>
-      <td style="white-space:nowrap"><button class="mini" onclick="openReconcile(${i})">Reconcile</button>
+      <td style="white-space:nowrap"><button class="mini" onclick="openCardPayment(${i})">Pay</button>
+      <button class="mini" onclick="openReconcile(${i})">Reconcile</button>
       <button class="mini danger" onclick="delCard(${i})">×</button></td>
     </tr>`).join("") || '<tr><td colspan="9" style="color:var(--muted)">No cards match this filter.</td></tr>';
 }
@@ -1453,8 +1584,10 @@ function openReconcile(i) {
     c.payFrom = $("rcFrom").value;
     c.treatAs = $("rcTreat").value;
     c.activeForSpend = $("rcActive").checked;
-    // upsert the pending statement-payment transfer
-    const pend = DB.ledger.find(e => e.type === "card_payment" && e.cardName === c.name && e.status === "Pending");
+    // upsert the pending statement-payment transfer. Exclude manual (Pay-button) payments so
+    // reconciling a card never quietly rewrites an ad-hoc payment you logged yourself — Reconcile
+    // owns only the one automatic statement payment.
+    const pend = DB.ledger.find(e => e.type === "card_payment" && e.cardName === c.name && e.status === "Pending" && e.cashImpact && !e.manual);
     if (pay > 0 && due) {
       if (pend) { pend.date = due; pend.amount = STS.r2(-pay); pend.source = c.payFrom; pend.description = c.name + " statement payment"; }
       else DB.ledger.push({
@@ -1465,6 +1598,71 @@ function openReconcile(i) {
     } else if (pend && pay <= 0) {
       DB.ledger = DB.ledger.filter(e => e !== pend);
     }
+    closeDlg(); save();
+  };
+}
+
+// Log a payment toward a card: cash leaves a checking account and pays down the card. This is the
+// proper way to record "I paid my card" — Reconcile is only for entering a new statement balance +
+// its one automatic payment. A payment logged here is marked `manual` so Reconcile won't overwrite
+// it, and it counts as "funded" on the card exactly like the statement payment does.
+function openCardPayment(i) {
+  if (!DB.cards.length) { alert("Add a card first."); return; }
+  const accts = spendableAccounts();
+  if (!accts.length) { alert("Add a spendable checking account first (payments come out of checking)."); return; }
+  const preName = i >= 0 && DB.cards[i] ? DB.cards[i].name : DB.cards[0].name;
+  const cardOpts = DB.cards.map(c => `<option ${c.name === preName ? "selected" : ""}>${esc(c.name)}</option>`).join("");
+  const today = STS.asOf(DB);
+  openDlg(`
+    <h3>Make a card payment</h3>
+    <p class="hint" style="margin-top:0">Records cash moving from a checking account to a card — the card's
+    balance drops, and it counts as a scheduled payment (so it lowers that card's Unfunded amount). Use a
+    <b>Pending</b> date to schedule a payment you haven't made yet; mark it <b>Cleared</b> once it actually
+    leaves your account.</p>
+    <div class="frow">
+      <div class="f"><span>Card</span><select id="cpCard">${cardOpts}</select></div>
+      <div class="f"><span>Amount</span><input type="number" step="0.01" min="0" id="cpAmt" style="width:120px"></div>
+      <div class="f"><span>From account</span><select id="cpFrom">${accts.map(a => `<option>${esc(a.name)}</option>`).join("")}</select></div>
+    </div>
+    <div class="frow">
+      <div class="f"><span>Date</span><input type="date" id="cpDate" value="${esc(today)}"></div>
+      <div class="f"><span>Status</span><select id="cpStatus"><option value="Pending">Scheduled (Pending)</option><option value="Cleared">Already paid (Cleared)</option></select></div>
+    </div>
+    <div class="frow" id="cpQuick" style="gap:8px;align-items:center"></div>
+    <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="cpSave">Log payment</button></div>
+  `);
+  const sync = () => {
+    const c = DB.cards.find(x => x.name === $("cpCard").value);
+    if (!c) return;
+    const owed = STS.cardOwedNow(DB, c);
+    const unf = STS.cardUnfunded(DB, c);
+    if (c.payFrom && accts.some(a => a.name === c.payFrom)) $("cpFrom").value = c.payFrom;
+    const btn = (label, amt) => `<button class="mini" type="button" data-amt="${amt}">${label}: ${fmt$(amt)}</button>`;
+    const quick = [btn("Balance", owed)];
+    if (unf > 0) quick.push(btn("Unfunded", unf));
+    if (c.statementBalance && STS.r2(c.statementBalance) !== owed) quick.push(btn("Statement", STS.r2(c.statementBalance)));
+    if (c.autopayMode !== "Full" && c.autopayAmount) quick.push(btn("Minimum", STS.r2(c.autopayAmount)));
+    $("cpQuick").innerHTML = '<span style="font-size:12px;color:var(--muted)">Fill amount:</span> ' + quick.join(" ");
+    $("cpQuick").querySelectorAll("button[data-amt]").forEach(b => b.onclick = () => { $("cpAmt").value = b.dataset.amt; });
+    if (!$("cpAmt").value) $("cpAmt").value = owed > 0 ? owed : "";
+  };
+  $("cpCard").onchange = () => { $("cpAmt").value = ""; sync(); };
+  sync();
+  $("cpSave").onclick = () => {
+    const c = DB.cards.find(x => x.name === $("cpCard").value);
+    const amt = parseFloat($("cpAmt").value);
+    const from = $("cpFrom").value;
+    const date = $("cpDate").value;
+    if (!c) { alert("Pick a card."); return; }
+    if (isNaN(amt) || amt <= 0) { alert("Enter a positive payment amount."); return; }
+    if (!from) { alert("Pick the account it's paid from."); return; }
+    if (!date) { alert("Pick a date."); return; }
+    DB.ledger.push({
+      id: useId(), date, type: "card_payment", description: c.name + " payment",
+      category: "Transfer", amount: STS.r2(-Math.abs(amt)), source: from, dest: c.name, payMethod: "ACH",
+      cardName: c.name, cashImpact: true, mandatory: false, status: $("cpStatus").value, inSTS: false,
+      recurringId: "", manual: true, notes: ""
+    });
     closeDlg(); save();
   };
 }
@@ -1765,7 +1963,7 @@ async function importJson(file) {
   } catch (e) { alert("Couldn't read that file as JSON: " + e.message); }
 }
 function resetSeed() {
-  if (confirm("Throw away everything here and reload the sample seed data?")) { DB = STS.ensureAccountAnchors(structuredClone(SEED)); save(); }
+  if (confirm("Throw away everything here and reload the sample seed data?")) { DB = STS.ensureAccountAnchors(buildSeed()); save(); }
 }
 
 // ---------------- settings tab ----------------
@@ -1797,8 +1995,10 @@ function bindSettings() {
 function openDlg(html) { const d = $("dlg"); d.innerHTML = html; d.showModal(); }
 function closeDlg() { $("dlg").close(); }
 function switchTab(name) {
-  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll("[data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll("section.panel").forEach(p => p.classList.toggle("on", p.id === "panel-" + name));
+  const moreBtn = document.getElementById("moreTabBtn");
+  if (moreBtn) moreBtn.classList.toggle("on", ["recurring", "import", "backup", "settings"].includes(name));
 }
 
 // ---------------- boot ----------------
@@ -1808,10 +2008,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (b) { DB.settings.mode = b.dataset.mode; save(); }
   });
   $("askAmt").addEventListener("input", () => renderVerdict(STS.computeAll(DB)));
-  $("tabRow").addEventListener("click", e => {
-    const b = e.target.closest("button[data-tab]");
-    if (b) switchTab(b.dataset.tab);
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-tab]");
+    if (b) {
+      switchTab(b.dataset.tab);
+      if (b.closest("#moreDlg")) $("moreDlg").close();
+    }
   });
+  $("moreTabBtn").addEventListener("click", () => $("moreDlg").showModal());
+  $("moreClose").addEventListener("click", () => $("moreDlg").close());
   $("qaAdd").addEventListener("click", quickAdd);
   $("ledgerFilter").addEventListener("change", renderLedger);
   $("cardsFilter").addEventListener("change", renderCards);
@@ -1821,6 +2026,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindSortHeaders("cardsHead", sortState.cards, renderCards);
   bindSortHeaders("accountsHead", sortState.accounts, renderAccounts);
   bindSortHeaders("recurringHead", sortState.recurring, renderRecurring);
+  $("runwayNet").addEventListener("change", render);
   $("addCardBtn").addEventListener("click", () => openReconcile(-1));
   $("addAcctBtn").addEventListener("click", () => openEditAccount(-1));
   $("addRecurringBtn").addEventListener("click", () => openEditRecurring(-1));
@@ -1830,7 +2036,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("importJson").addEventListener("change", e => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
   $("resetBtn").addEventListener("click", resetSeed);
   bindSettings();
-  switchTab("ledger");
+  switchTab(window.matchMedia("(max-width: 768px)").matches ? "dashboard" : "ledger");
   render();
 });
 </script>

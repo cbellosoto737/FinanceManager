@@ -8,12 +8,24 @@ Everything is in a single file: **[`safe-to-spend.html`](safe-to-spend.html)**.
 Double-click it (or open it in any browser) — no install, no server, no account, works offline.
 All data stays in that browser's local storage; nothing ever leaves your machine.
 
+Works the same on a phone: under ~768px wide, the page switches to a bottom tab bar (Home, Ledger,
+Cards, Accounts, More) instead of the desktop's row of tab buttons — Home is the dashboard (the
+headline number, tiles, and 60-day runway); everything else that doesn't fit in the bar (Recurring,
+Import CSV, Backup, Settings) lives behind **More**. Forms stack into single-column fields sized
+for touch, and wide tables scroll horizontally within their own box instead of the whole page.
+
 ## The one rule it enforces (no double counting)
 
 - A **card purchase** is the real spending event. The moment you log it, it raises that card's
   **unfunded** total on the Cards tab — but no cash leaves checking yet.
 - The later **card payment** is a **transfer** of cash from checking to the card. It is never a
-  second expense.
+  second expense. To record one, use the **Pay** button on the Cards tab (or "Card payment…" in
+  quick-add) — that opens a small dialog for the amount, which checking account it comes from, and
+  the date. Leave it **Pending** to schedule a payment you haven't made yet, or **Cleared** if it
+  already left your account. (**Reconcile** is a different thing: it's for entering a card's new
+  *statement* balance and its one automatic statement payment — not for logging that you paid.) A
+  payment logged via **Pay** counts toward that card's *funded* amount just like the statement
+  payment does, and multiple payments on one card all add up.
 - The checking projection only reacts to rows that actually move cash — a new card purchase never
   double-counts there. But **Safe to Spend itself is a different, broader number**: it's the
   checking-based figure minus the **total unfunded card obligation**, so a card purchase lowers the
@@ -61,6 +73,11 @@ All data stays in that browser's local storage; nothing ever leaves your machine
   un-autopaid spend hit today, not just what's already scheduled" — and its subtext makes clear
   it's already baked into the headline above, not a second, competing number to reconcile in your
   head.
+- The **60-day runway** has a **Net after cards** column (toggle it with the checkbox above the
+  table): projected checking minus your unfunded card debt. The plain *Projected checking* column is
+  literal cash; the *Net after cards* column is the more complete picture — it lands right around
+  your Safe-to-Spend number and is the one to watch if you don't want a card statement to sneak up
+  on you. Uncheck the box for the classic cash-only view.
 
 ## The two clocks: "what's real right now" vs. "what's still coming"
 
@@ -68,7 +85,10 @@ Every cash-impact ledger row is in exactly one of two buckets, never both — th
 whole app from ever double-counting a dollar:
 - **Cleared** = it actually happened. It's baked into the relevant account's or card's **Balance**
   (as of that account/card's own "Balance as of" date) and is invisible to the projection/window
-  from that point on.
+  from that point on. A Cleared row dated in the *future* is the one exception the app guards
+  against — it waits until that date arrives before touching your balance, since "cleared" is
+  supposed to mean *already happened* (this is why scheduling a payment for its due date and
+  pre-marking it Cleared no longer yanks the cash out early).
 - **Pending** = scheduled but hasn't happened yet. It's invisible to Balance and instead drives the
   60-day projection and the pre-payday "scheduled outflows/inflows" figure.
 The instant something flips from Pending to Cleared, it moves from the second bucket to the first —
@@ -76,10 +96,12 @@ nothing needs to be re-entered, and nothing is ever counted in both places at on
 
 ## First run
 
-The app loads sample seed data (from `SafeToSpend_Model.xlsx`) with a fixed "today" of
-2024-07-12 so you can see it working: Safe to Spend = **$1,156.40** (Conservative — the checking
-math alone gives $1,208.16, minus OneKey Expedia's $51.76 of unfunded card debt), projected
-low **−$1,296.19 on Aug 5**.
+The app loads generic sample data built **relative to today** — a couple of checking accounts, a
+few savings/investment accounts, five credit cards (one of them carrying a min-only balance so you
+can see *unfunded* debt in action), and a spread of recurring bills and a biweekly paycheck. Because
+it's anchored to the real current date, the demo never shows stale dates from some past year, and
+every "add" dialog defaults to today. It's all placeholder data — replace it on the Accounts /
+Cards / Recurring tabs, or **Reset to seed data** to bring the demo back.
 
 ## Loading your real data
 
