@@ -19,13 +19,12 @@ for touch, and wide tables scroll horizontally within their own box instead of t
 - A **card purchase** is the real spending event. The moment you log it, it raises that card's
   **unfunded** total on the Cards tab — but no cash leaves checking yet.
 - The later **card payment** is a **transfer** of cash from checking to the card. It is never a
-  second expense. To record one, use the **Pay** button on the Cards tab (or "Card payment…" in
-  quick-add) — that opens a small dialog for the amount, which checking account it comes from, and
-  the date. Leave it **Pending** to schedule a payment you haven't made yet, or **Cleared** if it
-  already left your account. (**Reconcile** is a different thing: it's for entering a card's new
-  *statement* balance and its one automatic statement payment — not for logging that you paid.) A
-  payment logged via **Pay** counts toward that card's *funded* amount just like the statement
-  payment does, and multiple payments on one card all add up.
+  second expense. You schedule it with the **Reconcile** button on the Cards tab: entering a card's
+  new *statement* balance and due date also queues its payment in one step. In that dialog you set the
+  **payment amount** (full / minimum / custom, per autopay), the **payment date** (defaults to the due
+  date — set it earlier if you pay ahead), and whether the payment is **Scheduled** (Pending, still
+  owed) or **Already paid** (Cleared, already left checking). The scheduled amount shows under
+  **Scheduled to pay** on the Cards tab and lowers that card's *Unfunded* figure.
 - The checking projection only reacts to rows that actually move cash — a new card purchase never
   double-counts there. But **Safe to Spend itself is a different, broader number**: it's the
   checking-based figure minus the **total unfunded card obligation**, so a card purchase lowers the
