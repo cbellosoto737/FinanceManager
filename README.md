@@ -74,10 +74,14 @@ for touch, and wide tables scroll horizontally within their own box instead of t
   it's already baked into the headline above, not a second, competing number to reconcile in your
   head.
 - The **60-day runway** has a **Net after cards** column (toggle it with the checkbox above the
-  table): projected checking minus your unfunded card debt. The plain *Projected checking* column is
-  literal cash; the *Net after cards* column is the more complete picture — it lands right around
-  your Safe-to-Spend number and is the one to watch if you don't want a card statement to sneak up
-  on you. Uncheck the box for the classic cash-only view.
+  table). It starts at today's checking minus your unfunded card debt (so day 1 lands right around
+  your Safe-to-Spend number), then rolls forward — but it obeys the same *no double counting* rule as
+  the rest of the app: a **card statement payment is neutral** to this line. Cash leaves checking (so
+  the plain *Projected checking* column dips), but that payment just retires card debt you were
+  already carrying, so your *net* position is unchanged. Real bills and income still move it, and a
+  brand-new card purchase lowers it (fresh debt). The *Projected checking* column is literal cash;
+  *Net after cards* is the more complete picture, and the one to watch if you don't want a card
+  statement to sneak up on you. Uncheck the box for the classic cash-only view.
 
 ## The two clocks: "what's real right now" vs. "what's still coming"
 

@@ -274,7 +274,7 @@
 
   <details class="runway" id="runwayBox" open>
     <summary id="runwaySummary">60-day checking runway</summary>
-    <label class="runway-toggle"><input type="checkbox" id="runwayNet" checked> Show <b>Net after cards</b> — projected checking minus unfunded card debt (closer to Safe to Spend)</label>
+    <label class="runway-toggle"><input type="checkbox" id="runwayNet" checked> Show <b>Net after cards</b> — your position after card debt (paying a card is neutral; it just settles debt)</label>
     <div class="runway-scroll">
       <table>
         <thead><tr><th>Date</th><th class="num">In</th><th class="num">Out</th><th class="num">Projected checking</th><th class="num netcol">Net after cards</th><th>State</th></tr></thead>
@@ -862,37 +862,50 @@ const STS = (() => {
 
   function projection(db, asOfD, horizon, reserve) {
     const end = addDays(asOfD, horizon);
-    const byDate = new Map();
-    // Only Pending events are layered on day-by-day here -- a Cleared one has already happened and
-    // is already part of the starting balance (spendableChecking, below), so replaying it again on
-    // its date would double it.
+    const byDate = new Map();     // the literal-cash "Projected checking" line
+    const netByDate = new Map();  // the "Net after cards" line (see below)
     for (const e of db.ledger) {
-      if (countsInWindow(e) && e.date >= asOfD && e.date <= end) {
+      if (!notVoid(e) || e.status !== "Pending" || e.date < asOfD || e.date > end) continue;
+      // Cash line: only events that actually move checking cash, layered on day-by-day. A Cleared one
+      // has already happened and is in the starting balance (spendableChecking), so replaying it here
+      // would double it -- hence Pending-only.
+      if (isCash(e)) {
         const m = byDate.get(e.date) || { inn: 0, out: 0 };
         if (e.amount >= 0) m.inn += e.amount; else m.out += e.amount;
         byDate.set(e.date, m);
       }
+      // Net-after-cards line: a running position that already accounts for card debt. The rule that
+      // keeps it honest is the same "no double counting" rule the whole app enforces -- a card
+      // statement payment is a TRANSFER (cash leaves checking, but an equal amount of card debt is
+      // retired), so it is NEUTRAL here and skipped, even though the cash line above subtracts it.
+      // What DOES move this line: real cash bills/income (as usual), and brand-new card charges dated
+      // after today (fresh debt you're taking on). Card charges already dated on/before today are
+      // baked into today's unfunded figure (the starting offset below), so they're not re-counted.
+      let nd = 0;
+      if (e.type === "card_payment" || e.type === "planned_spend") nd = 0;         // transfer / optional-not-real: neutral
+      else if (e.cardName && !e.cashImpact) nd = e.date > asOfD ? e.amount : 0;     // card charge/refund = new/less debt, only if genuinely future
+      else if (e.cashImpact) nd = e.amount;                                         // real cash flow: income (+) / bill (−)
+      if (nd) netByDate.set(e.date, r2((netByDate.get(e.date) || 0) + nd));
     }
-    // The "net" line offsets every day's projected checking by the card debt that has no scheduled
-    // payment behind it yet (the same unfunded figure Safe to Spend subtracts). Scheduled statement
-    // payments already dip the cash line on their due dates, so they're not double-counted here; only
-    // the un-scheduled remainder is a flat drag. Day 1 of the net line therefore lands right around
-    // the Safe-to-Spend number, which is what makes this the "more complete" view of the runway.
-    const unfunded = totalUnfunded(db);
+    // The net line starts at today's checking minus today's unfunded card debt (the same figure Safe
+    // to Spend subtracts), so day 1 lands right around the Safe-to-Spend number, then rolls forward by
+    // the deltas above. Because statement payments are neutral, paying a card never drags this line
+    // down -- it only moves when real money comes in/goes out or you take on new card spending.
     const rows = [];
-    let bal = spendableChecking(db), low = Infinity, lowDate = asOfD, netLow = Infinity, netLowDate = asOfD, d = asOfD;
+    let bal = spendableChecking(db), netBal = r2(spendableChecking(db) - totalUnfunded(db));
+    let low = Infinity, lowDate = asOfD, netLow = Infinity, netLowDate = asOfD, d = asOfD;
     for (let i = 0; i <= horizon; i++) {
       const m = byDate.get(d) || { inn: 0, out: 0 };
       bal = r2(bal + m.inn + m.out);
-      const net = r2(bal - unfunded);
+      netBal = r2(netBal + (netByDate.get(d) || 0));
       const state = bal < 0 ? "neg" : bal < reserve ? "low" : "ok";
-      const netState = net < 0 ? "neg" : net < reserve ? "low" : "ok";
-      rows.push({ date: d, inn: r2(m.inn), out: r2(m.out), balance: bal, net, state, netState });
+      const netState = netBal < 0 ? "neg" : netBal < reserve ? "low" : "ok";
+      rows.push({ date: d, inn: r2(m.inn), out: r2(m.out), balance: bal, net: netBal, state, netState });
       if (bal < low) { low = bal; lowDate = d; }
-      if (net < netLow) { netLow = net; netLowDate = d; }
+      if (netBal < netLow) { netLow = netBal; netLowDate = d; }
       d = addDays(d, 1);
     }
-    return { rows, low: r2(low), lowDate, net: { low: r2(netLow), lowDate: netLowDate }, unfunded };
+    return { rows, low: r2(low), lowDate, net: { low: r2(netLow), lowDate: netLowDate }, unfunded: totalUnfunded(db) };
   }
 
   // Recurring instances due within the horizon that have no ledger event yet.
