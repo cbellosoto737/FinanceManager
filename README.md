@@ -49,6 +49,10 @@ for touch, and wide tables scroll horizontally within their own box instead of t
   either way, exactly like the "no double counting" rule for any other card purchase. The two rows
   are tagged ("↳ pays down X" / "debt paydown") so they're never mistaken for duplicates — deleting
   either one prompts to delete both together, since one without the other leaves the numbers wrong.
+  When you **Reconcile** a debt (as opposed to a normal card), the dialog swaps the "pay from checking"
+  fields for a **Paid by recurring** picker: choose the recurring bill that clears this debt and its
+  next charge becomes the debt's **Scheduled to pay** and due date — no checking payment is scheduled,
+  so the reconcile stays tied to the recurring payment that actually pays it down.
 - **Accounts** (checking/savings) work exactly like Cards: **Balance is calculated, not typed in.**
   It starts from whatever you set at **Balance as of** and rolls forward automatically with every
   **Cleared** cash-impact ledger entry touching that account dated on or after that day — mark a
