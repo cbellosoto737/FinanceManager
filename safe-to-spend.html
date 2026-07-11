@@ -381,11 +381,11 @@
         <thead id="cardsHead"><tr>
           <th data-sort="name">Card<span class="sort-arrow" data-key="name"></span></th>
           <th class="num" data-sort="owed">Balance<span class="sort-arrow" data-key="owed"></span></th>
-          <th class="num" data-sort="newActivity">New since reconcile<span class="sort-arrow" data-key="newActivity"></span></th>
+          <th class="num" data-sort="newActivity" title="Spending charged to this card since your last statement cutoff (the 'Balance as of' date) — it's building toward your NEXT statement. It keeps climbing as you spend and only resets to zero when you Reconcile the next statement.">Since statement<span class="sort-arrow" data-key="newActivity"></span></th>
           <th class="num" data-sort="statement">Statement<span class="sort-arrow" data-key="statement"></span></th>
-          <th data-sort="due">Due<span class="sort-arrow" data-key="due"></span></th>
+          <th data-sort="due" title="The due date on your current statement (set when you Reconcile). The date you'll actually be paying is under 'Scheduled to pay'.">Statement due<span class="sort-arrow" data-key="due"></span></th>
           <th data-sort="autopay">Autopay<span class="sort-arrow" data-key="autopay"></span></th>
-          <th class="num" data-sort="funded">Funded<span class="sort-arrow" data-key="funded"></span></th>
+          <th class="num" data-sort="funded" title="Cash payment(s) currently scheduled toward this card, and the date the next one lands. Includes the automatic statement payment from Reconcile plus anything you log with Pay.">Scheduled to pay<span class="sort-arrow" data-key="funded"></span></th>
           <th class="num" data-sort="unfunded">Unfunded<span class="sort-arrow" data-key="unfunded"></span></th>
           <th></th>
         </tr></thead>
@@ -395,14 +395,18 @@
     <div class="frow" style="margin-top:12px">
       <button class="ghost" id="addCardBtn">+ Add card</button>
     </div>
-    <p class="hint"><b>Balance</b> and <b>Funded</b> are both calculated, never typed in directly. Balance starts
-    from whatever you set at <b>Balance as of</b> and rolls forward with every purchase, refund, and posted
-    payment dated on or after that date. Funded is whatever payment is currently scheduled for this card;
-    Unfunded is the gap. To set or correct a card's starting balance (e.g. when you first add it, or you're
-    backfilling purchases that happened after your last statement closed), hit <b>Reconcile</b> — set "Balance
-    as of" to the date your statement actually covers through (not necessarily today), and anything you log
-    dated that day or later rolls in automatically. Saving also schedules the payment (full / minimum / custom,
-    per the card's autopay).</p>
+    <p class="hint"><b>Balance</b> and <b>Scheduled to pay</b> are both calculated, never typed in directly. Balance
+    starts from whatever you set at <b>Balance as of</b> and rolls forward with every purchase, refund, and posted
+    payment dated on or after that date. <b>Since statement</b> is what you've charged to the card since that date —
+    it climbs as you spend and only resets when you Reconcile the next statement (so it's meant to keep growing, not
+    to be paid down). <b>Scheduled to pay</b> shows the cash payment(s) currently queued toward the card and the date
+    the next one lands; <b>Unfunded</b> is the gap between what's owed and what's scheduled.</p>
+    <p class="hint" style="margin-top:6px"><b>Two buttons, two jobs.</b> Hit <b>Reconcile</b> when a new statement
+    arrives — enter the new statement balance, its due date, and set "Balance as of" to the statement's cutoff. That
+    resets <i>Since statement</i>, updates the <i>Statement due</i> date, and schedules the statement payment
+    automatically (full / minimum / custom, per autopay). Hit <b>Pay</b> any other time you want to schedule or record
+    a cash payment toward the card — leave it Pending to schedule it, or Cleared once it's actually left checking.
+    Payments from either button show up together under <b>Scheduled to pay</b>.</p>
   </section>
 
   <section class="panel card" id="panel-accounts">
@@ -820,6 +824,20 @@ const STS = (() => {
     }
     return r2(f);
   }
+  // The scheduled payment(s) behind "Funded", surfaced so the Cards tab can show WHEN a card gets paid,
+  // not just how much is queued. Returns the earliest pending cash payment's date, the running total
+  // (same figure as cardFunded), and a count so the UI can hint "+N more" when several are stacked.
+  // Whichever button created them (Reconcile's auto statement payment or a manual Pay) all count here.
+  function cardNextPayment(db, c) {
+    let date = null, count = 0, total = 0;
+    for (const e of db.ledger) {
+      if (notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending" && e.cashImpact) {
+        count++; total += Math.abs(e.amount);
+        if (!date || e.date < date) date = e.date;
+      }
+    }
+    return { date, count, total: r2(total) };
+  }
   const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - cardFunded(db, c))) : 0;
   const totalUnfunded = db => r2(db.cards.reduce((s, c) => s + cardUnfunded(db, c), 0));
 
@@ -1150,7 +1168,7 @@ const STS = (() => {
     r2, todayStr, toDate, toStr, addDays, daysBetween, addMonthsAnchored,
     asOf, effectiveNextPayday, spendableChecking, savingsBackup,
     accountAnchorDate, accountNewActivity, accountBalanceNow, ensureAccountAnchors,
-    cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardUnfunded, totalUnfunded,
+    cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardNextPayment, cardUnfunded, totalUnfunded,
     windowFlows, safeToSpend, projection,
     missingRecurring, instanceEvent, debtPaydownEvent, instanceEvents, occurrences,
     parseCSV, parseDateLoose, parseAmountLoose, normalizeCsv, classifyImport,
@@ -1502,6 +1520,7 @@ function renderCards() {
     c, i,
     owed: STS.cardOwedNow(DB, c),
     funded: STS.cardFunded(DB, c),
+    sched: STS.cardNextPayment(DB, c),
     unf: STS.cardUnfunded(DB, c),
     newActivity: STS.cardNewActivity(DB, c),
     auto: c.autopayMode + (c.autopayMode !== "Full" && c.autopayAmount ? " " + fmt$(c.autopayAmount) : "")
@@ -1512,14 +1531,16 @@ function renderCards() {
   else if (f === "active") rows = rows.filter(r => r.c.activeForSpend !== false);
   rows = applySort(rows, sortState.cards, CARDS_SORT_KEYS);
   renderSortArrows($("cardsHead"), sortState.cards);
-  $("cardsBody").innerHTML = rows.map(({ c, i, owed, funded, unf, newActivity, auto }) => `<tr>
+  $("cardsBody").innerHTML = rows.map(({ c, i, owed, funded, sched, unf, newActivity, auto }) => `<tr>
       <td>${esc(c.name)}${c.treatAs === "Debt" ? ' <span class="chip dim">debt</span>' : ""}</td>
       <td class="num">${fmt$(owed)}</td>
       <td class="num">${newActivity ? `<span class="chip warn">+${fmt$(newActivity)}</span>` : "—"}</td>
       <td class="num">${fmt$(c.statementBalance)}</td>
       <td>${c.dueDate ? fmtDate(c.dueDate) : ""}</td>
       <td>${esc(auto)}</td>
-      <td class="num">${fmt$(funded)}</td>
+      <td class="num">${funded > 0
+        ? `${fmt$(funded)}<br><span class="chip dim">for ${sched.date ? fmtDate(sched.date) : "—"}${sched.count > 1 ? ` +${sched.count - 1}` : ""}</span>`
+        : '<span style="color:var(--muted)">none scheduled</span>'}</td>
       <td class="num">${unf > 0 ? `<span class="chip warn">${fmt$(unf)}</span>` : fmt$(0)}</td>
       <td style="white-space:nowrap"><button class="mini" onclick="openCardPayment(${i})">Pay</button>
       <button class="mini" onclick="openReconcile(${i})">Reconcile</button>
