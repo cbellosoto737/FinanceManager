@@ -291,10 +291,11 @@
       immediately subtracted from Safe to Spend below — no cash leaves checking yet, but the debt is real, so
       it counts right away rather than staying invisible until a statement payment eventually gets scheduled.
       The later <b>card payment</b> is just a transfer of cash from checking to the card — never a second
-      expense. Log one with the <b>Pay</b> button on the Cards tab (Reconcile is only for entering a new
-      statement balance). Reconciling — or paying — moves that amount from "unfunded" into "scheduled outflow"
-      (or, if the due date falls after your next payday, off the near-term radar entirely) — either way, the
-      headline can only hold steady or improve once the real due date is known, never drop as a surprise later.</p>
+      expense. You schedule it on the Cards tab with <b>Reconcile</b>: enter the card's new statement balance and
+      due date and it queues the payment for you (leave it Scheduled, or mark it Already paid once the cash has
+      left). Reconciling moves that amount from "unfunded" into "scheduled outflow" (or, if the due date falls
+      after your next payday, off the near-term radar entirely) — either way, the headline can only hold steady or
+      improve once the real due date is known, never drop as a surprise later.</p>
       <p><b>Safe to spend</b> = spendable checking − your cash reserve − everything scheduled to leave checking
       before the next payday (+ anything scheduled to arrive before then) − every card's unfunded balance.
       Moderate adds the next paycheck; Aggressive adds savings backup. Only rows that actually move cash, plus
@@ -327,7 +328,6 @@
           <option value="expense">Expense</option>
           <option value="income">Money in</option>
           <option value="refund">Refund / credit</option>
-          <option value="cardpay">Card payment…</option>
         </select></div>
       <div class="f"><span>Paid with / into</span><select id="qaWith"></select></div>
       <div class="f"><span>When</span><input id="qaDate" type="date"></div>
@@ -381,11 +381,11 @@
         <thead id="cardsHead"><tr>
           <th data-sort="name">Card<span class="sort-arrow" data-key="name"></span></th>
           <th class="num" data-sort="owed">Balance<span class="sort-arrow" data-key="owed"></span></th>
-          <th class="num" data-sort="newActivity">New since reconcile<span class="sort-arrow" data-key="newActivity"></span></th>
+          <th class="num" data-sort="newActivity" title="Spending charged to this card since your last statement cutoff (the 'Balance as of' date) — it's building toward your NEXT statement. It keeps climbing as you spend and only resets to zero when you Reconcile the next statement.">Since statement<span class="sort-arrow" data-key="newActivity"></span></th>
           <th class="num" data-sort="statement">Statement<span class="sort-arrow" data-key="statement"></span></th>
-          <th data-sort="due">Due<span class="sort-arrow" data-key="due"></span></th>
+          <th data-sort="due" title="The due date on your current statement (set when you Reconcile). The date you'll actually be paying is under 'Scheduled to pay'.">Statement due<span class="sort-arrow" data-key="due"></span></th>
           <th data-sort="autopay">Autopay<span class="sort-arrow" data-key="autopay"></span></th>
-          <th class="num" data-sort="funded">Funded<span class="sort-arrow" data-key="funded"></span></th>
+          <th class="num" data-sort="funded" title="Cash payment(s) currently scheduled toward this card, and the date the next one lands. Set up when you Reconcile the card's statement.">Scheduled to pay<span class="sort-arrow" data-key="funded"></span></th>
           <th class="num" data-sort="unfunded">Unfunded<span class="sort-arrow" data-key="unfunded"></span></th>
           <th></th>
         </tr></thead>
@@ -395,14 +395,18 @@
     <div class="frow" style="margin-top:12px">
       <button class="ghost" id="addCardBtn">+ Add card</button>
     </div>
-    <p class="hint"><b>Balance</b> and <b>Funded</b> are both calculated, never typed in directly. Balance starts
-    from whatever you set at <b>Balance as of</b> and rolls forward with every purchase, refund, and posted
-    payment dated on or after that date. Funded is whatever payment is currently scheduled for this card;
-    Unfunded is the gap. To set or correct a card's starting balance (e.g. when you first add it, or you're
-    backfilling purchases that happened after your last statement closed), hit <b>Reconcile</b> — set "Balance
-    as of" to the date your statement actually covers through (not necessarily today), and anything you log
-    dated that day or later rolls in automatically. Saving also schedules the payment (full / minimum / custom,
-    per the card's autopay).</p>
+    <p class="hint"><b>Balance</b> and <b>Scheduled to pay</b> are both calculated, never typed in directly. Balance
+    starts from whatever you set at <b>Balance as of</b> and rolls forward with every purchase, refund, and posted
+    payment dated on or after that date. <b>Since statement</b> is what you've charged to the card since that date —
+    it climbs as you spend and only resets when you Reconcile the next statement (so it's meant to keep growing, not
+    to be paid down). <b>Scheduled to pay</b> shows the cash payment(s) currently queued toward the card and the date
+    the next one lands; <b>Unfunded</b> is the gap between what's owed and what's scheduled.</p>
+    <p class="hint" style="margin-top:6px"><b>Paying a card is one button: Reconcile.</b> When a new statement arrives,
+    hit <b>Reconcile</b> — enter the new statement balance, its due date, and set "Balance as of" to the statement's
+    cutoff. In one step that resets <i>Since statement</i>, updates the <i>Statement due</i> date, and schedules the
+    payment (full / minimum / custom, per autopay) — which then shows under <b>Scheduled to pay</b>. Leave the payment
+    <b>Scheduled</b> to queue it, or set it <b>Already paid</b> once the cash has actually left checking; set a
+    <i>Payment date</i> earlier than the due date if you pay ahead.</p>
   </section>
 
   <section class="panel card" id="panel-accounts">
@@ -810,15 +814,32 @@ const STS = (() => {
   }
 
   // Funded = cash already scheduled to pay this card down. That's every pending cash-transfer payment
-  // aimed at this card — the statement payment Reconcile keeps in the ledger, PLUS any ad-hoc
-  // payments logged via the Pay button (Card Payment modal). Unfunded is whatever's owed beyond that:
-  // real spend (or a minimum-only autopay) with no scheduled payment behind it yet.
+  // aimed at this card — the statement payment Reconcile schedules in the ledger (plus any legacy ad-hoc
+  // payments from older data). Unfunded is whatever's owed beyond that: real spend (or a minimum-only
+  // autopay) with no scheduled payment behind it yet.
   function cardFunded(db, c) {
     let f = 0;
     for (const e of db.ledger) {
       if (notVoid(e) && e.cardName === c.name && e.type === "card_payment" && e.status === "Pending" && e.cashImpact) f += Math.abs(e.amount);
     }
     return r2(f);
+  }
+  // The scheduled payment(s) behind "Funded", surfaced so the Cards tab can show WHEN a card gets paid,
+  // not just how much is queued. Returns the earliest pending payment's date, the running total, and a
+  // count so the UI can hint "+N more" when several are stacked. The relevant payment differs by type:
+  // a Card is paid by a cash transfer from checking (cashImpact true, what Reconcile schedules); a Debt
+  // is paid down by a recurring charge on ANOTHER card (cashImpact false — no cash leaves checking), so
+  // its upcoming recurring paydown is what counts here.
+  function cardNextPayment(db, c) {
+    const wantCash = c.treatAs !== "Debt";
+    let date = null, count = 0, total = 0;
+    for (const e of db.ledger) {
+      if (!notVoid(e) || e.cardName !== c.name || e.type !== "card_payment" || e.status !== "Pending") continue;
+      if (!!e.cashImpact !== wantCash) continue;
+      count++; total += Math.abs(e.amount);
+      if (!date || e.date < date) date = e.date;
+    }
+    return { date, count, total: r2(total) };
   }
   const cardUnfunded = (db, c) => c.treatAs === "Card" ? r2(Math.max(0, cardOwedNow(db, c) - cardFunded(db, c))) : 0;
   const totalUnfunded = db => r2(db.cards.reduce((s, c) => s + cardUnfunded(db, c), 0));
@@ -1150,7 +1171,7 @@ const STS = (() => {
     r2, todayStr, toDate, toStr, addDays, daysBetween, addMonthsAnchored,
     asOf, effectiveNextPayday, spendableChecking, savingsBackup,
     accountAnchorDate, accountNewActivity, accountBalanceNow, ensureAccountAnchors,
-    cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardUnfunded, totalUnfunded,
+    cardAnchorDate, cardNewActivity, cardOwedNow, cardFunded, cardNextPayment, cardUnfunded, totalUnfunded,
     windowFlows, safeToSpend, projection,
     missingRecurring, instanceEvent, debtPaydownEvent, instanceEvents, occurrences,
     parseCSV, parseDateLoose, parseAmountLoose, normalizeCsv, classifyImport,
@@ -1337,9 +1358,6 @@ function renderQuickAddOptions() {
   $("catList").innerHTML = [...new Set(DB.ledger.map(e => e.category).filter(Boolean))].map(c => `<option value="${esc(c)}">`).join("");
 }
 function quickAdd() {
-  // Card payments have two endpoints (a checking account AND a card), so they get their own modal
-  // instead of the single "paid with / into" picker the other kinds share.
-  if ($("qaKind").value === "cardpay") { openCardPayment(-1); return; }
   const desc = $("qaDesc").value.trim();
   const amt = parseFloat($("qaAmt").value);
   const date = $("qaDate").value || STS.asOf(DB);
@@ -1494,14 +1512,14 @@ function openEditEvent(id) {
 const CARDS_SORT_KEYS = {
   name: r => r.c.name.toLowerCase(), owed: r => r.owed, newActivity: r => r.newActivity,
   statement: r => r.c.statementBalance, due: r => r.c.dueDate || "", autopay: r => r.auto.toLowerCase(),
-  funded: r => r.funded, unfunded: r => r.unf
+  funded: r => r.sched.total, unfunded: r => r.unf
 };
 function renderCards() {
   const f = $("cardsFilter").value;
   let rows = DB.cards.map((c, i) => ({
     c, i,
     owed: STS.cardOwedNow(DB, c),
-    funded: STS.cardFunded(DB, c),
+    sched: STS.cardNextPayment(DB, c),
     unf: STS.cardUnfunded(DB, c),
     newActivity: STS.cardNewActivity(DB, c),
     auto: c.autopayMode + (c.autopayMode !== "Full" && c.autopayAmount ? " " + fmt$(c.autopayAmount) : "")
@@ -1512,17 +1530,18 @@ function renderCards() {
   else if (f === "active") rows = rows.filter(r => r.c.activeForSpend !== false);
   rows = applySort(rows, sortState.cards, CARDS_SORT_KEYS);
   renderSortArrows($("cardsHead"), sortState.cards);
-  $("cardsBody").innerHTML = rows.map(({ c, i, owed, funded, unf, newActivity, auto }) => `<tr>
+  $("cardsBody").innerHTML = rows.map(({ c, i, owed, sched, unf, newActivity, auto }) => `<tr>
       <td>${esc(c.name)}${c.treatAs === "Debt" ? ' <span class="chip dim">debt</span>' : ""}</td>
       <td class="num">${fmt$(owed)}</td>
       <td class="num">${newActivity ? `<span class="chip warn">+${fmt$(newActivity)}</span>` : "—"}</td>
       <td class="num">${fmt$(c.statementBalance)}</td>
       <td>${c.dueDate ? fmtDate(c.dueDate) : ""}</td>
       <td>${esc(auto)}</td>
-      <td class="num">${fmt$(funded)}</td>
+      <td class="num">${sched.total > 0
+        ? `${fmt$(sched.total)}<br><span class="chip dim">${c.treatAs === "Debt" ? "via recurring " : "for "}${sched.date ? fmtDate(sched.date) : "—"}${sched.count > 1 ? ` +${sched.count - 1}` : ""}</span>`
+        : '<span style="color:var(--muted)">none scheduled</span>'}</td>
       <td class="num">${unf > 0 ? `<span class="chip warn">${fmt$(unf)}</span>` : fmt$(0)}</td>
-      <td style="white-space:nowrap"><button class="mini" onclick="openCardPayment(${i})">Pay</button>
-      <button class="mini" onclick="openReconcile(${i})">Reconcile</button>
+      <td style="white-space:nowrap"><button class="mini" onclick="openReconcile(${i})">Reconcile</button>
       <button class="mini danger" onclick="delCard(${i})">×</button></td>
     </tr>`).join("") || '<tr><td colspan="9" style="color:var(--muted)">No cards match this filter.</td></tr>';
 }
@@ -1537,8 +1556,13 @@ function openReconcile(i) {
     : DB.cards[i];
   const acctOpts = spendableAccounts().map(a => `<option ${a.name === c.payFrom ? "selected" : ""}>${esc(a.name)}</option>`).join("");
   const liveOwed = isNew ? 0 : STS.cardOwedNow(DB, c);
-  const liveFunded = isNew ? 0 : STS.cardFunded(DB, c);
+  const liveSched = isNew ? { total: 0 } : STS.cardNextPayment(DB, c);
   const newActivity = isNew ? 0 : STS.cardNewActivity(DB, c);
+  // Recurring bills that pay this debt down (set via the Recurring tab's "Pays down debt"). A debt is
+  // never paid from checking, so reconciling one links it to the recurring charge that actually clears it.
+  const debtRecur = isNew ? [] : DB.recurring.filter(r => r.payDownDebt === c.name);
+  const debtRecurOpts = `<option value="">— none yet —</option>` + debtRecur.map(r =>
+    `<option value="${esc(r.id)}" ${r.id === c.paidBy ? "selected" : ""}>${esc(r.name)} — ${fmt$(r.amount)}${r.nextDate ? " · next " + fmtDate(r.nextDate) : ""}</option>`).join("");
   openDlg(`
     <h3>${isNew ? "Add card" : "Reconcile " + esc(c.name) + " to its statement"}</h3>
     ${isNew ? `<div class="frow"><div class="f"><span>Card name</span><input id="rcName" size="24"></div></div>` : ""}
@@ -1546,25 +1570,37 @@ function openReconcile(i) {
       ? `<p class="hint" style="margin-top:0">Enter what this card currently owes — that becomes its starting balance.
          Every purchase, refund, and payment you log dated on or after the "as of" date below is tracked automatically on top of it.</p>`
       : `<p class="hint" style="margin-top:0">Calculated right now: <b>${fmt$(liveOwed)}</b> owed${newActivity ? ` (includes ${fmt$(newActivity)} in new purchases/refunds logged on or after the "as of" date below)` : ""},
-         <b>${fmt$(liveFunded)}</b> already scheduled to be paid. Check this against your real statement and adjust below if it's different —
+         <b>${fmt$(liveSched.total)}</b> already scheduled to be paid. Check this against your real statement and adjust below if it's different —
          saving resets the starting point so the running balance starts fresh from there.</p>`
     }
     <div class="frow">
       <div class="f"><span>${isNew ? "Starting balance" : "Statement balance"}</span><input type="number" step="0.01" id="rcStmt" value="${liveOwed}" style="width:120px"></div>
       <div class="f"><span title="What this card owed at the start of this day. Anything you log dated on or after this date counts as new.">Balance as of</span><input type="date" id="rcAsOf" value="${esc(STS.cardAnchorDate(c))}"></div>
       <div class="f"><span>Due date</span><input type="date" id="rcDue" value="${esc(c.dueDate || "")}"></div>
-      <div class="f"><span>Pay from</span><select id="rcFrom">${acctOpts}</select></div>
+      <div class="f" id="rcFromField"><span>Pay from</span><select id="rcFrom">${acctOpts}</select></div>
     </div>
-    <div class="frow">
+    <div class="frow" id="rcCardPay">
       <div class="f"><span>Autopay</span><select id="rcMode"><option ${c.autopayMode === "Full" ? "selected" : ""}>Full</option><option ${c.autopayMode === "Min" ? "selected" : ""}>Min</option><option ${c.autopayMode === "Custom" ? "selected" : ""}>Custom</option></select></div>
       <div class="f"><span>Payment amount</span><input type="number" step="0.01" id="rcPay" style="width:120px"></div>
+      <div class="f"><span title="When the payment actually leaves checking. Defaults to the due date — set it earlier if you pay before then.">Payment date</span><input type="date" id="rcPayDate"></div>
+      <div class="f"><span title="Scheduled = you still owe it (Pending); it counts as an upcoming outflow. Already paid = it has left checking (Cleared), so it drops the balance now.">Payment</span><select id="rcPayStatus"><option value="Pending">Scheduled</option><option value="Cleared">Already paid</option></select></div>
+    </div>
+    <div class="frow" id="rcDebtPay" style="display:none">
+      <div class="f"><span title="A debt isn't paid from checking — it's paid down by a recurring charge on another card. Pick the recurring bill that pays it (set one up on the Recurring tab with 'Pays down debt'). Its next charge becomes this debt's scheduled payment and sets the due date.">Paid by recurring</span><select id="rcPaidBy">${debtRecurOpts}</select></div>
+      <div class="f"><span>Next payment</span><input type="text" id="rcPaidByNext" disabled style="width:210px"></div>
     </div>
     <div class="frow">
       <div class="f"><span>Treat as</span><select id="rcTreat"><option ${c.treatAs === "Card" ? "selected" : ""}>Card</option><option ${c.treatAs === "Debt" ? "selected" : ""}>Debt</option></select></div>
       <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="rcActive" ${c.activeForSpend !== false ? "checked" : ""}> active for new spending</label>
     </div>
-    <p class="hint" style="margin:4px 0 0">Saving schedules (or refreshes) this card's pending statement-payment transfer —
-    that scheduled amount becomes "Funded" on the Cards tab automatically; whatever's left over shows as Unfunded.</p>
+    <p class="hint" id="rcCardHint" style="margin:4px 0 0">Saving schedules this card's statement payment — that amount becomes
+    <b>Scheduled to pay</b> on the Cards tab, dated on the payment date above, and whatever's left over shows as Unfunded.
+    Leave it <b>Scheduled</b> to queue a payment you haven't made yet, or switch to <b>Already paid</b> once it's actually
+    left checking. This is the one place to pay a card statement and roll it to its next due date.</p>
+    <p class="hint" id="rcDebtHint" style="margin:4px 0 0;display:none">Saving records this debt's new balance. A debt is paid down by the
+    recurring bill you pick above — that bill's next charge (from the Recurring tab) becomes this debt's <b>Scheduled to pay</b> and
+    sets its due date. No cash payment from checking is scheduled, and any leftover one from a past reconcile is cleared out.
+    ${!isNew && !debtRecur.length ? `<b>Heads up:</b> no recurring bill pays this debt yet — add one on the Recurring tab with "Pays down debt" set to ${esc(c.name)}.` : ""}</p>
     <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="rcSave">${isNew ? "Add card" : "Save & schedule payment"}</button></div>
   `);
   const payBox = $("rcPay");
@@ -1576,12 +1612,48 @@ function openReconcile(i) {
   $("rcMode").onchange = syncPay; $("rcStmt").oninput = () => { if ($("rcMode").value === "Full") payBox.value = $("rcStmt").value; };
   payBox.value = c.autopayMode === "Full" ? liveOwed : (c.autopayAmount || "");
   syncPay();
+  // Payment date tracks the due date until you deliberately override it, so the common case (pay on the
+  // due date) needs no extra typing while an early payment stays possible.
+  let prevDue = c.dueDate || "";
+  const payDateBox = $("rcPayDate");
+  payDateBox.value = prevDue;
+  $("rcDue").addEventListener("input", () => {
+    const d = $("rcDue").value;
+    if (!payDateBox.value || payDateBox.value === prevDue) payDateBox.value = d;
+    prevDue = d;
+  });
+  // Debt vs Card: a Card is paid by a checking transfer this dialog schedules; a Debt is paid by a
+  // recurring card charge, so swap the cash-payment fields for the "Paid by recurring" picker. Picking a
+  // recurring pulls its next charge date onto the due date so the debt lines up with what actually pays it.
+  const recurById = id => DB.recurring.find(r => r.id === id);
+  const syncPaidBy = () => {
+    const r = recurById($("rcPaidBy").value);
+    $("rcPaidByNext").value = r ? (r.nextDate ? fmtDateLong(r.nextDate) + " · " + fmt$(r.amount) : "no next date set") : "— not linked —";
+    if (r && r.nextDate) { $("rcDue").value = r.nextDate; $("rcDue").dispatchEvent(new Event("input")); }
+  };
+  $("rcPaidBy").onchange = syncPaidBy;
+  const applyTreat = () => {
+    const debt = $("rcTreat").value === "Debt";
+    $("rcCardPay").style.display = debt ? "none" : "";
+    $("rcDebtPay").style.display = debt ? "" : "none";
+    $("rcFromField").style.display = debt ? "none" : "";
+    $("rcCardHint").style.display = debt ? "none" : "";
+    $("rcDebtHint").style.display = debt ? "" : "none";
+    $("rcSave").textContent = isNew ? "Add card" : (debt ? "Save" : "Save & schedule payment");
+    if (debt) $("rcPaidByNext").value = (recurById($("rcPaidBy").value) || {}).nextDate ? fmtDateLong(recurById($("rcPaidBy").value).nextDate) + " · " + fmt$(recurById($("rcPaidBy").value).amount) : "— not linked —";
+  };
+  $("rcTreat").addEventListener("change", applyTreat);
+  applyTreat();
   $("rcSave").onclick = () => {
     const stmt = parseFloat($("rcStmt").value) || 0;
     const pay = parseFloat($("rcPay").value) || 0;
     const due = $("rcDue").value;
+    const payDate = $("rcPayDate").value || due;
+    const payStatus = $("rcPayStatus").value === "Cleared" ? "Cleared" : "Pending";
     const asOfEntered = $("rcAsOf").value;
+    const isDebt = $("rcTreat").value === "Debt";
     if (!asOfEntered) { alert("Pick the date this balance is accurate as of."); return; }
+    if (!isDebt && pay > 0 && !payDate) { alert("Pick a due date (or a payment date) so the payment can be scheduled."); return; }
     if (isNew) {
       const name = $("rcName").value.trim();
       if (!name) { alert("Name the card."); return; }
@@ -1597,85 +1669,31 @@ function openReconcile(i) {
     c.payFrom = $("rcFrom").value;
     c.treatAs = $("rcTreat").value;
     c.activeForSpend = $("rcActive").checked;
-    // upsert the pending statement-payment transfer. Exclude manual (Pay-button) payments so
-    // reconciling a card never quietly rewrites an ad-hoc payment you logged yourself — Reconcile
-    // owns only the one automatic statement payment.
-    const pend = DB.ledger.find(e => e.type === "card_payment" && e.cardName === c.name && e.status === "Pending" && e.cashImpact && !e.manual);
-    if (pay > 0 && due) {
-      if (pend) { pend.date = due; pend.amount = STS.r2(-pay); pend.source = c.payFrom; pend.description = c.name + " statement payment"; }
-      else DB.ledger.push({
-        id: useId(), date: due, type: "card_payment", description: c.name + " statement payment",
-        category: "Transfer", amount: STS.r2(-pay), source: c.payFrom, dest: c.name, payMethod: "ACH",
-        cardName: c.name, cashImpact: true, mandatory: true, status: "Pending", inSTS: false, recurringId: "", notes: ""
-      });
-    } else if (pend && pay <= 0) {
-      DB.ledger = DB.ledger.filter(e => e !== pend);
+    if (isDebt) {
+      // A debt is paid down by a recurring card charge, not a checking transfer. Link it to the recurring
+      // bill that clears it (its upcoming charge is what shows as this debt's Scheduled to pay), and drop
+      // any stale cash payment a previous reconcile may have wrongly scheduled from checking.
+      c.paidBy = $("rcPaidBy").value || null;
+      DB.ledger = DB.ledger.filter(e => !(e.type === "card_payment" && e.cardName === c.name && e.cashImpact && e.status === "Pending"));
+    } else {
+      c.paidBy = null;
+      // Upsert this card's scheduled statement payment. Reconcile is now the only way to schedule a card
+      // payment, so it owns the single still-Pending transfer: re-reconciling refreshes it in place (date,
+      // amount, status). A payment already marked Cleared is history — it won't match the Pending lookup, so
+      // it's left untouched and the new statement gets its own fresh payment.
+      const pend = DB.ledger.find(e => e.type === "card_payment" && e.cardName === c.name && e.status === "Pending" && e.cashImpact);
+      if (pay > 0 && payDate) {
+        const row = pend || {
+          id: useId(), type: "card_payment", dest: c.name, payMethod: "ACH", cardName: c.name,
+          cashImpact: true, mandatory: true, inSTS: false, recurringId: "", notes: ""
+        };
+        row.date = payDate; row.amount = STS.r2(-pay); row.source = c.payFrom;
+        row.description = c.name + " statement payment"; row.category = "Transfer"; row.status = payStatus;
+        if (!pend) DB.ledger.push(row);
+      } else if (pend && pay <= 0) {
+        DB.ledger = DB.ledger.filter(e => e !== pend);
+      }
     }
-    closeDlg(); save();
-  };
-}
-
-// Log a payment toward a card: cash leaves a checking account and pays down the card. This is the
-// proper way to record "I paid my card" — Reconcile is only for entering a new statement balance +
-// its one automatic payment. A payment logged here is marked `manual` so Reconcile won't overwrite
-// it, and it counts as "funded" on the card exactly like the statement payment does.
-function openCardPayment(i) {
-  if (!DB.cards.length) { alert("Add a card first."); return; }
-  const accts = spendableAccounts();
-  if (!accts.length) { alert("Add a spendable checking account first (payments come out of checking)."); return; }
-  const preName = i >= 0 && DB.cards[i] ? DB.cards[i].name : DB.cards[0].name;
-  const cardOpts = DB.cards.map(c => `<option ${c.name === preName ? "selected" : ""}>${esc(c.name)}</option>`).join("");
-  const today = STS.asOf(DB);
-  openDlg(`
-    <h3>Make a card payment</h3>
-    <p class="hint" style="margin-top:0">Records cash moving from a checking account to a card — the card's
-    balance drops, and it counts as a scheduled payment (so it lowers that card's Unfunded amount). Use a
-    <b>Pending</b> date to schedule a payment you haven't made yet; mark it <b>Cleared</b> once it actually
-    leaves your account.</p>
-    <div class="frow">
-      <div class="f"><span>Card</span><select id="cpCard">${cardOpts}</select></div>
-      <div class="f"><span>Amount</span><input type="number" step="0.01" min="0" id="cpAmt" style="width:120px"></div>
-      <div class="f"><span>From account</span><select id="cpFrom">${accts.map(a => `<option>${esc(a.name)}</option>`).join("")}</select></div>
-    </div>
-    <div class="frow">
-      <div class="f"><span>Date</span><input type="date" id="cpDate" value="${esc(today)}"></div>
-      <div class="f"><span>Status</span><select id="cpStatus"><option value="Pending">Scheduled (Pending)</option><option value="Cleared">Already paid (Cleared)</option></select></div>
-    </div>
-    <div class="frow" id="cpQuick" style="gap:8px;align-items:center"></div>
-    <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="cpSave">Log payment</button></div>
-  `);
-  const sync = () => {
-    const c = DB.cards.find(x => x.name === $("cpCard").value);
-    if (!c) return;
-    const owed = STS.cardOwedNow(DB, c);
-    const unf = STS.cardUnfunded(DB, c);
-    if (c.payFrom && accts.some(a => a.name === c.payFrom)) $("cpFrom").value = c.payFrom;
-    const btn = (label, amt) => `<button class="mini" type="button" data-amt="${amt}">${label}: ${fmt$(amt)}</button>`;
-    const quick = [btn("Balance", owed)];
-    if (unf > 0) quick.push(btn("Unfunded", unf));
-    if (c.statementBalance && STS.r2(c.statementBalance) !== owed) quick.push(btn("Statement", STS.r2(c.statementBalance)));
-    if (c.autopayMode !== "Full" && c.autopayAmount) quick.push(btn("Minimum", STS.r2(c.autopayAmount)));
-    $("cpQuick").innerHTML = '<span style="font-size:12px;color:var(--muted)">Fill amount:</span> ' + quick.join(" ");
-    $("cpQuick").querySelectorAll("button[data-amt]").forEach(b => b.onclick = () => { $("cpAmt").value = b.dataset.amt; });
-    if (!$("cpAmt").value) $("cpAmt").value = owed > 0 ? owed : "";
-  };
-  $("cpCard").onchange = () => { $("cpAmt").value = ""; sync(); };
-  sync();
-  $("cpSave").onclick = () => {
-    const c = DB.cards.find(x => x.name === $("cpCard").value);
-    const amt = parseFloat($("cpAmt").value);
-    const from = $("cpFrom").value;
-    const date = $("cpDate").value;
-    if (!c) { alert("Pick a card."); return; }
-    if (isNaN(amt) || amt <= 0) { alert("Enter a positive payment amount."); return; }
-    if (!from) { alert("Pick the account it's paid from."); return; }
-    if (!date) { alert("Pick a date."); return; }
-    DB.ledger.push({
-      id: useId(), date, type: "card_payment", description: c.name + " payment",
-      category: "Transfer", amount: STS.r2(-Math.abs(amt)), source: from, dest: c.name, payMethod: "ACH",
-      cardName: c.name, cashImpact: true, mandatory: false, status: $("cpStatus").value, inSTS: false,
-      recurringId: "", manual: true, notes: ""
-    });
     closeDlg(); save();
   };
 }
@@ -1841,6 +1859,11 @@ function openGenerate() {
   if (!missing.length) { alert("Nothing to add — every upcoming bill in range is already in the ledger."); return; }
   openDlg(`
     <h3>Add upcoming bills to the ledger</h3>
+    <div class="frow" style="justify-content:flex-end;gap:8px;margin-bottom:6px">
+      <span style="font-size:12px;color:var(--muted);margin-right:auto" id="genCount"></span>
+      <button class="mini" type="button" id="genAll">Check all</button>
+      <button class="mini" type="button" id="genNone">Uncheck all</button>
+    </div>
     <div class="checklist">${missing.map((m, i) => `
       <label><input type="checkbox" data-gen="${i}" checked>
       <span>${esc(m.template.name)} — ${fmt$(m.template.kind === "income" ? m.template.amount : -m.template.amount)} <span style="color:var(--muted)">(${esc(m.template.payMethod)}${m.template.payDownDebt ? " → pays down " + esc(m.template.payDownDebt) : ""})</span></span>
@@ -1849,6 +1872,17 @@ function openGenerate() {
     <p class="hint" style="margin:8px 0 0">These are added as Pending. Card-charged bills sit on the card (no cash impact) until the statement payment; checking-charged bills hit the projection directly. A bill that pays down a debt also logs that debt's paydown automatically.</p>
     <div class="dlg-actions"><button class="ghost" onclick="closeDlg()">Cancel</button><button class="primary" id="genSave">Add selected</button></div>
   `);
+  const genBoxes = () => [...document.querySelectorAll("[data-gen]")];
+  const genRefresh = () => {
+    const n = genBoxes().filter(cb => cb.checked).length;
+    $("genCount").textContent = `${n} of ${missing.length} selected`;
+    $("genSave").textContent = n ? `Add selected (${n})` : "Add selected";
+    $("genSave").disabled = n === 0;
+  };
+  $("genAll").onclick = () => { genBoxes().forEach(cb => cb.checked = true); genRefresh(); };
+  $("genNone").onclick = () => { genBoxes().forEach(cb => cb.checked = false); genRefresh(); };
+  genBoxes().forEach(cb => cb.addEventListener("change", genRefresh));
+  genRefresh();
   $("genSave").onclick = () => {
     let n = 0;
     document.querySelectorAll("[data-gen]").forEach(cb => {

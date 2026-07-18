@@ -19,13 +19,12 @@ for touch, and wide tables scroll horizontally within their own box instead of t
 - A **card purchase** is the real spending event. The moment you log it, it raises that card's
   **unfunded** total on the Cards tab — but no cash leaves checking yet.
 - The later **card payment** is a **transfer** of cash from checking to the card. It is never a
-  second expense. To record one, use the **Pay** button on the Cards tab (or "Card payment…" in
-  quick-add) — that opens a small dialog for the amount, which checking account it comes from, and
-  the date. Leave it **Pending** to schedule a payment you haven't made yet, or **Cleared** if it
-  already left your account. (**Reconcile** is a different thing: it's for entering a card's new
-  *statement* balance and its one automatic statement payment — not for logging that you paid.) A
-  payment logged via **Pay** counts toward that card's *funded* amount just like the statement
-  payment does, and multiple payments on one card all add up.
+  second expense. You schedule it with the **Reconcile** button on the Cards tab: entering a card's
+  new *statement* balance and due date also queues its payment in one step. In that dialog you set the
+  **payment amount** (full / minimum / custom, per autopay), the **payment date** (defaults to the due
+  date — set it earlier if you pay ahead), and whether the payment is **Scheduled** (Pending, still
+  owed) or **Already paid** (Cleared, already left checking). The scheduled amount shows under
+  **Scheduled to pay** on the Cards tab and lowers that card's *Unfunded* figure.
 - The checking projection only reacts to rows that actually move cash — a new card purchase never
   double-counts there. But **Safe to Spend itself is a different, broader number**: it's the
   checking-based figure minus the **total unfunded card obligation**, so a card purchase lowers the
@@ -50,6 +49,10 @@ for touch, and wide tables scroll horizontally within their own box instead of t
   either way, exactly like the "no double counting" rule for any other card purchase. The two rows
   are tagged ("↳ pays down X" / "debt paydown") so they're never mistaken for duplicates — deleting
   either one prompts to delete both together, since one without the other leaves the numbers wrong.
+  When you **Reconcile** a debt (as opposed to a normal card), the dialog swaps the "pay from checking"
+  fields for a **Paid by recurring** picker: choose the recurring bill that clears this debt and its
+  next charge becomes the debt's **Scheduled to pay** and due date — no checking payment is scheduled,
+  so the reconcile stays tied to the recurring payment that actually pays it down.
 - **Accounts** (checking/savings) work exactly like Cards: **Balance is calculated, not typed in.**
   It starts from whatever you set at **Balance as of** and rolls forward automatically with every
   **Cleared** cash-impact ledger entry touching that account dated on or after that day — mark a
