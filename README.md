@@ -4,9 +4,15 @@ One question, one number: **"Can we spend this money right now without causing a
 shortfall before the next paycheck, before upcoming bills hit, or once every card gets paid
 off?"**
 
-Everything is in a single file: **[`safe-to-spend.html`](safe-to-spend.html)**.
-Double-click it (or open it in any browser) — no install, no server, no account, works offline.
-All data stays in that browser's local storage; nothing ever leaves your machine.
+Everything lives in a single file, **[`index.html`](index.html)**. Double-click it (or open it
+in any browser) to try it standalone — no install, no server, no account, works offline, with
+data kept in that browser's local storage only.
+
+Deployed with the setup below (see **Multi-user access**), the same file instead signs in with
+Google and reads/writes one shared copy of the data in a small MySQL database, so two people —
+different devices, different browsers — see the exact same numbers. It still keeps a local
+offline-safe cache and still works if the network drops, but the browser's local storage is no
+longer the source of truth once this is deployed.
 
 Works the same on a phone: under ~768px wide, the page switches to a bottom tab bar (Home, Ledger,
 Cards, Accounts, More) instead of the desktop's row of tab buttons — Home is the dashboard (the
@@ -137,4 +143,63 @@ Cards / Recurring tabs, or **Reset to seed data** to bring the demo back.
 When a card statement arrives, **Reconcile** it (two fields, one click). A surprise bill goes in
 via "Add something" on the Ledger tab in seconds.
 
-Move between devices with **Backup → Export/Import JSON**.
+Running standalone (no backend deployed), move between devices with **Backup → Export/Import
+JSON**. Once the multi-user backend below is deployed, both people's devices sync automatically —
+Export/Import JSON is then just an extra safety-net backup, and the one-time way to migrate
+whatever you already had in local storage into the shared database (see below).
+
+## Multi-user access (Google Sign-In + Hostinger)
+
+By default this app is 100% client-side. To let two people (e.g. spouses) share one set of data
+from their own devices, deploy the small PHP + MySQL backend included in this repo (`api/`,
+`schema.sql`, `config.sample.php`) alongside `index.html` on Hostinger shared/Business hosting.
+Nothing about the calculation engine or the tabs changes — only *where* the data lives (a MySQL
+row instead of `localStorage`) and *who* can open it (Google Sign-In, restricted to an allowlist
+of exactly the email addresses you configure).
+
+### One-time setup
+
+1. **Google Cloud Console** → create/select a project → **APIs & Services → OAuth consent
+   screen**: type **External**, publishing status **Testing** (leave it in Testing — don't click
+   Publish; Testing supports up to 100 named test users indefinitely and skips Google's app
+   verification process). Add both household email addresses as test users.
+2. Still in Google Cloud Console → **Credentials → Create Credentials → OAuth Client ID** → type
+   **Web application** → under *Authorized JavaScript origins* add your real site URL
+   (`https://yourdomain.com`). No redirect URI is needed. Copy the resulting **Client ID**.
+3. In `index.html`, set `GOOGLE_CLIENT_ID` (near the top of the second `<script>` block) to that
+   Client ID.
+4. In **Hostinger hPanel**: create a MySQL database and a database user scoped to it; confirm SSL
+   is active and HTTP requests are force-redirected to HTTPS (required — login cookies won't be
+   sent otherwise); set the PHP version to 8.1 or newer.
+5. Open that database in **phpMyAdmin** and run everything in `schema.sql`.
+6. Copy `config.sample.php` to `config.php`, fill in the database credentials, the same Google
+   Client ID, and `ALLOWED_EMAILS` (the two addresses allowed to sign in). Upload this file **one
+   directory above** `public_html` (e.g. `domains/yourdomain.com/config.php`) — never inside
+   `public_html` itself. After uploading, request that exact path in a browser and confirm it
+   returns a 404; if it doesn't, move it and fix the path before going further.
+7. Upload `index.html` and the whole `api/` folder into `public_html/`.
+8. Visit the site. You should see a **sign-in screen**, not the app. Sign in with an allowlisted
+   Google account — it should load the (empty/demo) data and the app should now show "Signed in
+   as …" under Settings.
+
+### Bringing over your existing data
+
+If you'd already been using the standalone version and have real data sitting in one browser's
+local storage:
+
+1. On that browser, **before** it loads the newly deployed version: **Backup → Export to JSON**.
+2. On the deployed, signed-in app: **Backup → Import from JSON**, choose that file. This is the
+   normal Import feature — it now also syncs straight to the shared database.
+3. The second person just signs in on their own device; they don't import anything — they'll
+   automatically pull the copy that's now on the server.
+
+### How it behaves day to day
+
+- Saves sync to the server automatically a moment after you make a change; a small localStorage
+  copy is kept as an offline fallback so the app still opens if the network is down.
+- If both of you happen to save around the same moment, the person whose save landed second sees
+  a banner saying changes were saved elsewhere, with a one-click reload — nothing is silently
+  overwritten.
+- Every save keeps the previous version in a small history table server-side, so a bad import or
+  a mistake is recoverable, not just a bug for the two of you to work around by hand.
+- **Settings → Sign out** ends your session on that device.

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Safe to Spend</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --bg: #f9f9f7;
@@ -239,9 +240,40 @@
     .tiles { grid-template-columns: 1fr; }
     .hero .value { font-size: 40px; }
   }
+  /* ---- login gate ---- */
+  #loginGate {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center; background: var(--bg);
+  }
+  #loginGate.show { display: flex; }
+  #loginGate .card { max-width: 340px; width: calc(100vw - 40px); text-align: center; }
+  #loginGate h1 { font-size: 18px; margin: 0 0 4px; }
+  #loginGate p { color: var(--ink2); font-size: 13.5px; margin: 0 0 18px; }
+  #loginGate #gsiButton { display: flex; justify-content: center; min-height: 40px; }
+  #loginGate .authError { color: var(--bad-text); font-size: 13px; margin-top: 14px; }
+  /* ---- sync banner ---- */
+  #syncBanner {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; display: none;
+    justify-content: center; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+  #syncBanner.show { display: flex; }
+  #syncBanner .inner {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--warn-bg); color: var(--warn-text); border-radius: 10px;
+    padding: 9px 14px; font-size: 13.5px; max-width: 640px; box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  }
 </style>
 </head>
 <body>
+<div id="loginGate">
+  <div class="card">
+    <h1>Safe to Spend</h1>
+    <p>Sign in with the Google account on the household allowlist to see the shared data.</p>
+    <div id="gsiButton"></div>
+    <div class="authError" id="loginError"></div>
+  </div>
+</div>
+<div id="syncBanner"><div class="inner" id="syncBannerInner"></div></div>
 <div class="wrap">
   <header class="top">
     <h1>Safe to Spend</h1>
@@ -517,6 +549,7 @@
 
   <section class="panel card" id="panel-settings">
     <h2>Settings</h2>
+    <p class="hint">Signed in as <b id="whoAmI"></b> — <button class="ghost mini" id="signOutBtn">Sign out</button></p>
     <div class="frow">
       <div class="f"><span>Pay frequency</span>
         <select id="setFreq"><option>Biweekly</option><option>Weekly</option><option>Semimonthly</option><option>Monthly</option></select></div>
@@ -1183,10 +1216,20 @@ const STS = (() => {
 <script>
 "use strict";
 // ============================ App (DOM) ============================
-const KEY = "safeToSpend.v1";
-let DB = load();
+// Replace with the OAuth Client ID from Google Cloud Console (Credentials > OAuth Client ID).
+// Not secret -- the server independently re-checks the token's "aud" against its own copy.
+const GOOGLE_CLIENT_ID = "your-client-id.apps.googleusercontent.com";
 
-function load() {
+const KEY = "safeToSpend.v1";
+const VERSION_KEY = "safeToSpend.v1.version";
+const DIRTY_KEY = "safeToSpend.v1.dirty";
+let DB = null;
+let currentVersion = 0;
+let currentEmail = "";
+
+// localStorage is now an offline-safe cache, not the source of truth -- the
+// server (api/data.php) is. Kept so the app still opens if the network is down.
+function loadLocalCache() {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
@@ -1194,9 +1237,145 @@ function load() {
       if (d && d.settings && Array.isArray(d.ledger)) return STS.ensureAccountAnchors(d);
     }
   } catch (e) { /* corrupted storage: fall through to seed */ }
-  return STS.ensureAccountAnchors(buildSeed());
+  return null;
 }
-function save() { localStorage.setItem(KEY, JSON.stringify(DB)); render(); }
+function saveLocalCache() {
+  localStorage.setItem(KEY, JSON.stringify(DB));
+  localStorage.setItem(VERSION_KEY, String(currentVersion));
+}
+function save() {
+  saveLocalCache();
+  localStorage.setItem(DIRTY_KEY, "1");
+  render();
+  scheduleSync();
+}
+
+// ---------------- server sync ----------------
+const apiHeaders = () => ({ "Content-Type": "application/json", "X-STS-Request": "1" });
+let syncTimer = null;
+let syncInFlight = false;
+
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(syncToServer, 800);
+}
+
+function showSyncBanner(html) {
+  $("syncBannerInner").innerHTML = html;
+  $("syncBanner").classList.add("show");
+}
+function hideSyncBanner() { $("syncBanner").classList.remove("show"); }
+
+async function syncToServer() {
+  if (syncInFlight) { scheduleSync(); return; }
+  syncInFlight = true;
+  try {
+    const res = await fetch("api/data.php", {
+      method: "POST", credentials: "same-origin", headers: apiHeaders(),
+      body: JSON.stringify({ data: DB, baseVersion: currentVersion })
+    });
+    if (res.status === 401) { showSyncBanner("Signed out — <button class=\"primary mini\" onclick=\"location.reload()\">reload to sign in again</button>."); return; }
+    if (res.status === 409) {
+      const body = await res.json();
+      showSyncBanner("⚠ Changes were saved from another device — <button class=\"primary mini\" onclick=\"location.reload()\">reload to see the latest</button> before saving more.");
+      return;
+    }
+    if (!res.ok) { showSyncBanner("Couldn't save to the server — will retry on your next change."); return; }
+    const body = await res.json();
+    currentVersion = body.version;
+    localStorage.setItem(VERSION_KEY, String(currentVersion));
+    localStorage.removeItem(DIRTY_KEY);
+    hideSyncBanner();
+  } catch (e) {
+    showSyncBanner("Couldn't reach the server — will retry on your next change.");
+  } finally {
+    syncInFlight = false;
+  }
+}
+
+function flushSyncNow() {
+  clearTimeout(syncTimer);
+  fetch("api/data.php", {
+    method: "POST", credentials: "same-origin", keepalive: true, headers: apiHeaders(),
+    body: JSON.stringify({ data: DB, baseVersion: currentVersion })
+  }).catch(() => {});
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && DB) flushSyncNow(); });
+window.addEventListener("pagehide", () => { if (DB) flushSyncNow(); });
+
+// ---------------- auth / boot ----------------
+function showLoginGate() { $("loginGate").classList.add("show"); initGoogleButton(); }
+function hideLoginGate() { $("loginGate").classList.remove("show"); }
+
+let googleButtonReady = false;
+function initGoogleButton() {
+  if (googleButtonReady) return;
+  if (!window.google || !window.google.accounts) { setTimeout(initGoogleButton, 100); return; }
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogleCredential });
+  google.accounts.id.renderButton($("gsiButton"), { theme: "outline", size: "large", width: 280 });
+  googleButtonReady = true;
+}
+
+async function onGoogleCredential(response) {
+  $("loginError").textContent = "";
+  try {
+    const res = await fetch("api/auth.php", {
+      method: "POST", credentials: "same-origin", headers: apiHeaders(),
+      body: JSON.stringify({ credential: response.credential })
+    });
+    if (!res.ok) { $("loginError").textContent = "That Google account isn't on the household allowlist."; return; }
+    await boot();
+  } catch (e) {
+    $("loginError").textContent = "Couldn't reach the server — try again.";
+  }
+}
+
+async function boot() {
+  const localCache = loadLocalCache();
+  const isDirty = localStorage.getItem(DIRTY_KEY) === "1";
+  try {
+    const res = await fetch("api/data.php", { credentials: "same-origin" });
+    if (res.status === 401) { showLoginGate(); return; }
+    if (!res.ok) throw new Error("data_fetch_failed");
+    const body = await res.json();
+    currentEmail = body.me || "";
+
+    if (body.data === null) {
+      // First run for this household: seed the server from local cache (or the demo seed).
+      DB = localCache || STS.ensureAccountAnchors(buildSeed());
+      currentVersion = body.version;
+      await syncToServer();
+    } else if (isDirty && localCache) {
+      // This browser has edits from last time that never made it to the server
+      // (e.g. it went offline mid-save) -- keep them rather than silently
+      // discarding them for whatever the server currently has.
+      DB = localCache;
+      currentVersion = Number(localStorage.getItem(VERSION_KEY)) || body.version;
+      showSyncBanner("Finishing a save from last time…");
+      scheduleSync();
+    } else {
+      DB = STS.ensureAccountAnchors(body.data);
+      currentVersion = body.version;
+    }
+    saveLocalCache();
+    hideLoginGate();
+    afterAuthed();
+  } catch (e) {
+    // Offline or server unreachable: fall back to the local cache so the app
+    // still opens, rather than hard-blocking on the login gate.
+    DB = localCache || STS.ensureAccountAnchors(buildSeed());
+    showSyncBanner("Couldn't reach the server — showing your last synced copy. Changes will sync once you're back online.");
+    hideLoginGate();
+    afterAuthed();
+  }
+}
+
+function afterAuthed() {
+  $("whoAmI").textContent = currentEmail;
+  bindSettings();
+  switchTab(window.matchMedia("(max-width: 768px)").matches ? "dashboard" : "ledger");
+  render();
+}
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -2082,9 +2261,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("exportBtn").addEventListener("click", exportJson);
   $("importJson").addEventListener("change", e => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ""; });
   $("resetBtn").addEventListener("click", resetSeed);
-  bindSettings();
-  switchTab(window.matchMedia("(max-width: 768px)").matches ? "dashboard" : "ledger");
-  render();
+  $("signOutBtn").addEventListener("click", async () => {
+    await fetch("api/logout.php", { method: "POST", credentials: "same-origin", headers: apiHeaders() }).catch(() => {});
+    location.reload();
+  });
+  boot();
 });
 </script>
 </body>

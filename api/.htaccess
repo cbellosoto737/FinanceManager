@@ -1,0 +1,8 @@
+# Defense-in-depth: config.php/schema.sql should never live under public_html
+# at all, but deny them outright here in case one is ever dropped in by mistake.
+<FilesMatch "\.(sql)$">
+  Require all denied
+</FilesMatch>
+<Files "config.php">
+  Require all denied
+</Files>
