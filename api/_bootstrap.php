@@ -1,9 +1,25 @@
 <?php
 declare(strict_types=1);
 
-// config.php lives one directory above public_html, never web-served.
-// api/_bootstrap.php -> public_html -> (site root) -> config.php
-require dirname(__DIR__, 2) . '/config.php';
+// config.php must live outside any web-served document root. Where exactly
+// that is depends on hosting layout, so try the two shapes that come up on
+// Hostinger: one directory above this site's public_html (the "domains/
+// yourdomain.com/public_html" layout), or two directories above (when this
+// site is itself a subfolder of a shared public_html, e.g. public_html/sts/
+// for a subdomain, and the account home -- sibling of public_html -- is the
+// first directory that isn't served by any vhost).
+$configCandidates = [dirname(__DIR__, 2) . '/config.php', dirname(__DIR__, 3) . '/config.php'];
+$configPath = null;
+foreach ($configCandidates as $candidate) {
+  if (is_file($candidate)) { $configPath = $candidate; break; }
+}
+if ($configPath === null) {
+  http_response_code(500);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode(['error' => 'config_missing']);
+  exit;
+}
+require $configPath;
 
 // Never let a raw PHP error/warning or an uncaught mysqli exception (mysqli
 // throws by default on PHP 8.1+) leak a stack trace or file path to the
